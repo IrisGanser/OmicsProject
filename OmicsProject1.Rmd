@@ -1,0 +1,43 @@
+---
+title: "Omics Project"
+author: "Iris Ganser, Jaqueline Materu, Sudip Karki"
+date: "`r Sys.Date()`"
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true  
+    
+fontsize: 12pt 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data Exploration
+```{r}
+# load required packages
+library(ggplot2)
+library(dplyr)
+
+# load data from my local files
+# is there any way we can change this so data can be loaded from an open source web location??
+
+alldata <- read.csv(file = "M2PHDS_19-20_OMICS_CLIN_DATA_MAARS_all_Fri_Apr_04_14h_CEST_2014.csv", header = TRUE, sep = "\t")
+fulldata <- read.csv(file = "M2PHDS_19-20_OMICS_CLIN_DATA_MAARS_AD_full_20190131_12-34-49.csv", header = TRUE, sep = "\t")
+
+dim(alldata)
+dim(fulldata)
+
+str(alldata)
+str(fulldata)
+
+names(alldata)
+names(fulldata) #this dataset is a nightmare, look at all those terrible variable names
+```
+
+# Some descriptive stats and plots of clinical data
+```{r}
+
+```
+
