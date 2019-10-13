@@ -104,5 +104,6 @@ annotations <- annotations
 
 # set up DGE sheet for annotations
 DGE <- DGEList(counts = omicsdata, samples = annotations, genes = rownames(omicsdata))
+
 ```
 
