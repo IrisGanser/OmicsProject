@@ -88,22 +88,45 @@ rownames(omicsdata)[1:10]
 # see as an example which samples were analyzed from patient MAARS_3_018
 names(omicsdata)[grep("MAARS_3_018.", x = names(omicsdata))]
 
-# try some clustering
-deucl_norm <- dist(t(omicsdata))
-# write those into file to sqve computing time next time
-write(x = deucl_norm, file = "expr_distance.txt")
-
-plot(deucl_norm)
-plot(flashClust::hclust(deucl_norm, method = "ward"))
-
 
 # build annotation dataset
 annotations <- data.frame(sample_id = colnames(omicsdata), MAARS_identifier = gsub('.{3}$', '', sample_id))
 annotations <- dplyr::left_join(annotations, alldata, by = "sample_id") %>% select(sample_id, MAARS_identifier.x, clinical_group, lesional, CUSTOM_Age, Gender) %>% rename(MAARS_identifier = MAARS_identifier.x)
-annotations <- annotations
+
+# relevel the dataset so that R picks the correct reference classes later on
+annotations$clinical_group <- relevel(annotations$clinical_group, ref = "CTRL")
+annotations$lesional <- relevel(annotations$lesional, ref = "NON_LES")
+
 
 # set up DGE sheet for annotations
 DGE <- DGEList(counts = omicsdata, samples = annotations, genes = rownames(omicsdata))
+
+# try some clustering
+deucl_norm <- dist(t(omicsdata))
+# write those into file to save computing time next time
+write(x = deucl_norm, file = "expr_distance.txt")
+
+plot(deucl_norm)
+plot(flashClust::hclust(deucl_norm, method = "ward"), labels = annotations$clinical_group)
+plot(flashClust::hclust(deucl_norm, method = "ward"), labels = annotations$lesional)
+
+# create model matrix
+design <- as.data.frame(model.matrix(~lesional, data = annotations))
+
+# add common dispersion factor to the gene expression data
+DGE_commondisp <- edgeR::estimateCommonDisp(DGE)
+
+# perform fit and likelihood ratio testing to identify differentially expressed genes between lesional and non-lesional skin (all participants included)
+fit <- glmFit(y = DGE_commondisp, design = design)
+lrt <- glmLRT(fit, coef = 2)
+
+signif_edgeR_lfc0 <- decideTestsDGE(lrt, adjust.method = "BH", p.value = 0.05, lfc = 0)
+summary(signif_edgeR_lfc0)
+genelist_edgeR_lfc0 <- DGE_commondisp$genes$genes[as.logical(signif_edgeR_lfc0)]
+
+signif_edgeR_lfc1 <- decideTestsDGE(lrt, adjust.method = "BH", p.value = 0.05, lfc = 1)
+summary(signif_edgeR_lfc1)
+genelist_edgeR_lfc1 <- DGE_commondisp$genes$genes[as.logical(signif_edgeR_lfc1)]
 
 ```
 
