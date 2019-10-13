@@ -19,12 +19,19 @@ knitr::opts_chunk$set(echo = TRUE)
 # load required packages
 library(ggplot2)
 library(dplyr)
+library(edgeR)
+library(limma)
+library(UpSetR)
+library(flashClust)
+library(GEOquery)
+
 
 # load data from my local files
 # is there any way we can change this so data can be loaded from an open source web location??
 
 alldata <- read.csv(file = "M2PHDS_19-20_OMICS_CLIN_DATA_MAARS_all_Fri_Apr_04_14h_CEST_2014.csv", header = TRUE, sep = "\t")
 fulldata <- read.csv(file = "M2PHDS_19-20_OMICS_CLIN_DATA_MAARS_AD_full_20190131_12-34-49.csv", header = TRUE, sep = "\t")
+omicsdata <- read.delim("~/Documents/Omics/Project/OmicsProject/M2PHDS_19-20_OMICS_TRANSC_MAARS_normTranscriptome_618samples_16042014.txt")
 
 dim(alldata)
 dim(fulldata)
@@ -36,8 +43,66 @@ names(alldata)
 names(fulldata) #this dataset is a nightmare, look at all those terrible variable names
 ```
 
-# Some descriptive stats and plots of clinical data
+# Some descriptive stats of basic data
 ```{r}
+# number of samples per group
+alldata %>% group_by(alldata$clinical_group) %>% summarise(n = n())
+# number of participants per group
+alldata %>% group_by(alldata$clinical_group) %>% summarise(n_distinct = n_distinct(MAARS_identifier))
 
+# sum up some potential confounding factors
+alldata %>% group_by(alldata$clinical_group) %>% 
+  summarise(n_distinct = n_distinct(MAARS_identifier), mean_age = mean(CUSTOM_Age), sd_age = sd(CUSTOM_Age),
+            percent_female = sum(Gender == "Female")/n()*100, family_history_AD = sum(CUSTOM_Fam._hist._Atopic_dermatitis == TRUE, na.rm = TRUE)/n()*100, family_history_PSO = sum(CUSTOM_Family_History_of_Psoriasis == TRUE, na.rm = TRUE)/n()*100)
+
+# allergy data
+alldata %>% group_by(alldata$clinical_group) %>% 
+  summarise(n_distinct = n_distinct(MAARS_identifier), allergy_pseudo_drug = sum(Known_Allergies_v2..Pseudo_Drug_Allergy == TRUE)/n()*100, allergy_dustmite = sum(Known_Allergies_v2..House_dust_mite == TRUE)/n()*100, allergy_food = sum(Known_Allergies_v2..Food == TRUE)/n()*100, allergy_pollen = sum(Known_Allergies_v2..Pollen == TRUE)/n()*100, allergy_contact = sum(Known_Allergies_v2..Contact_Allergy == TRUE)/n()*100, allergy_drug = sum(Known_Allergies_v2..Drug_Allergy == TRUE)/n()*100, allergy_animal = sum(Known_Allergies_v2..Animal == TRUE)/n()*100)
+
+# chronic diseases
+alldata %>% group_by(alldata$clinical_group) %>% 
+  summarise(n_distinct = n_distinct(MAARS_identifier), hyperlipidemia = sum(Other_concurrent_chronic_diseases_v2..Hyperlipidemia == TRUE)/n()*100, others = sum(Other_concurrent_chronic_diseases_v2..Others == TRUE)/n()*100,  diabetes_non_insulin = sum(Other_concurrent_chronic_diseases_v2..Diabetes_.non.insulin. == TRUE)/n()*100,  thyroid_dysfunction = sum(Other_concurrent_chronic_diseases_v2..Thyroid_dysfunction == TRUE)/n()*100,  asthma = sum(Other_concurrent_chronic_diseases_v2..Asthma == TRUE)/n()*100,  hypertension = sum(Other_concurrent_chronic_diseases_v2..Hypertension == TRUE)/n()*100)
+
+# medication
+alldata %>% group_by(alldata$clinical_group) %>% 
+  summarise(n_distinct = n_distinct(MAARS_identifier), anti_hypertensive = sum(Concomitant_Medication_v2..Anti.Hypertensive == TRUE)/n()*100, anti_inflammatory = sum(Concomitant_Medication_v2..Anti.Inflammatory.non_steroid. == TRUE)/n()*100, other_hormones = sum(Concomitant_Medication_v2..Other_hormones == TRUE)/n()*100, thyroid_hormones = sum(Concomitant_Medication_v2..Thyroid_hormones == TRUE)/n()*100, statins = sum(Concomitant_Medication_v2..Statins == TRUE)/n()*100, insulin = sum(Concomitant_Medication_v2..Insulin == TRUE)/n()*100, others = sum(Concomitant_Medication_v2..Others == TRUE)/n()*100)
+
+
+# distribution of SCORAD scores
+names(fulldata)[grep(pattern = ".SCORAD.", x = names(fulldata))]
+fulldata  %>% summary(patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)
+ggplot(data = fulldata, aes(y = patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)) + 
+  geom_boxplot()
+
+# sample identifier for non-lesional skin: uninvolved.skin.biopsy.uninvolved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier. , column 266
+# sample identifier for lesional skin: involved.skin.biopsy.involved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier. , column 262
+```
+
+```{r}
+# transcriptomics data
+str(omicsdata)
+dim(omicsdata)
+colnames(omicsdata)[1:10]
+rownames(omicsdata)[1:10]
+
+# see as an example which samples were analyzed from patient MAARS_3_018
+names(omicsdata)[grep("MAARS_3_018.", x = names(omicsdata))]
+
+# try some clustering
+deucl_norm <- dist(t(omicsdata))
+# write those into file to sqve computing time next time
+write(x = deucl_norm, file = "expr_distance.txt")
+
+plot(deucl_norm)
+plot(flashClust::hclust(deucl_norm, method = "ward"))
+
+
+# build annotation dataset
+annotations <- data.frame(sample_id = colnames(omicsdata), MAARS_identifier = gsub('.{3}$', '', sample_id))
+annotations <- dplyr::left_join(annotations, alldata, by = "sample_id") %>% select(sample_id, MAARS_identifier.x, clinical_group, lesional, CUSTOM_Age, Gender) %>% rename(MAARS_identifier = MAARS_identifier.x)
+annotations <- annotations
+
+# set up DGE sheet for annotations
+DGE <- DGEList(counts = omicsdata, samples = annotations, genes = rownames(omicsdata))
 ```
 
