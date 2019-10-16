@@ -70,10 +70,12 @@ alldata %>% group_by(alldata$clinical_group) %>%
 
 # distribution of SCORAD scores
 names(fulldata)[grep(pattern = ".SCORAD.", x = names(fulldata))]
-fulldata  %>% summary(patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)
+summary(fulldata$patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)
+
 ggplot(data = fulldata, aes(y = patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)) + 
   geom_boxplot()
 
+# SCORAD-Score is column 226
 # sample identifier for non-lesional skin: uninvolved.skin.biopsy.uninvolved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier. , column 266
 # sample identifier for lesional skin: involved.skin.biopsy.involved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier. , column 262
 ```
@@ -90,8 +92,12 @@ names(omicsdata)[grep("MAARS_3_018.", x = names(omicsdata))]
 
 
 # build annotation dataset
+sample_id <- colnames(omicsdata)
 annotations <- data.frame(sample_id = colnames(omicsdata), MAARS_identifier = gsub('.{3}$', '', sample_id))
-annotations <- dplyr::left_join(annotations, alldata, by = "sample_id") %>% select(sample_id, MAARS_identifier.x, clinical_group, lesional, CUSTOM_Age, Gender) %>% rename(MAARS_identifier = MAARS_identifier.x)
+annotations <- dplyr::left_join(annotations, alldata, by = "sample_id") %>% select(sample_id, MAARS_identifier.x, clinical_group, lesional, CUSTOM_Age, Gender, Institution) %>% rename(MAARS_identifier = MAARS_identifier.x)
+
+annotations <- dplyr::left_join(annotations, fulldata, by = c("sample_id" = "involved.skin.biopsy.involved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier.")) %>% select(sample_id, MAARS_identifier, clinical_group, lesional, CUSTOM_Age, Gender, Institution, patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)  %>% rename(SCORAD_Score = patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)
+annotations$SCORAD_Score[is.na(annotations$SCORAD_Score)] <- 0
 
 # relevel the dataset so that R picks the correct reference classes later on
 annotations$clinical_group <- relevel(annotations$clinical_group, ref = "CTRL")
@@ -102,9 +108,8 @@ annotations$lesional <- relevel(annotations$lesional, ref = "NON_LES")
 DGE <- DGEList(counts = omicsdata, samples = annotations, genes = rownames(omicsdata))
 
 # try some clustering
-deucl_norm <- dist(t(omicsdata))
-# write those into file to save computing time next time
-write(x = deucl_norm, file = "expr_distance.txt")
+# deucl_norm <- dist(t(omicsdata)) takes a lot of time to compute, this is why I saved it in a txt file
+deucl_norm <- scan("expr_distance.txt")
 
 plot(deucl_norm)
 plot(flashClust::hclust(deucl_norm, method = "ward"), labels = annotations$clinical_group)
