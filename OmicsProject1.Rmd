@@ -24,6 +24,7 @@ library(limma)
 library(UpSetR)
 library(flashClust)
 library(GEOquery)
+library(dendextend)
 
 
 # load data from my local files
@@ -112,9 +113,19 @@ DGE <- DGEList(counts = omicsdata, samples = annotations, genes = rownames(omics
 deucl_norm <- scan("expr_distance.txt")
 
 plot(deucl_norm)
+
+annotations$dend_col[annotations$Institution == "HHU"] <- "green"
+annotations$dend_col[annotations$clinical_group == "KINGS"] <- "blue"
+annotations$dend_col[annotations$clinical_group == "UH"] <- "red" 
+  
 plot(flashClust::hclust(deucl_norm, method = "ward"), labels = annotations$clinical_group)
 plot(flashClust::hclust(deucl_norm, method = "ward"), labels = annotations$lesional)
 
+
+dend <- hclust(deucl_norm, method = "ward") %>% as.dendrogram
+dend %>% set("labels", "") %>% set("leaves_pch", 19) %>% set("leaves_col", annotations$dend_col) %>% plot() 
+
+  
 # create model matrix
 design <- as.data.frame(model.matrix(~lesional, data = annotations))
 
