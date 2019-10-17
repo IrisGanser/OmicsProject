@@ -25,6 +25,8 @@ library(UpSetR)
 library(flashClust)
 library(GEOquery)
 library(dendextend)
+library(RColorBrewer)
+library(knitr)
 
 
 # load data from my local files
@@ -46,7 +48,7 @@ names(fulldata) #this dataset is a nightmare, look at all those terrible variabl
 
 # clean and subset the data
 ```{r}
-#define function %!in% as opposite of %in% - I realized I actually don't need that
+#define function %!in% as opposite of %in% - I realized I actually don't need that now, but later
 `%!in%` <- function(a,b) ! a %in% b
 
 ## remove all samples from alldata that are not used in microarray
@@ -76,7 +78,7 @@ alldata %>% group_by(alldata$clinical_group) %>%
   summarise(n_distinct = n_distinct(MAARS_identifier), mean_age = mean(CUSTOM_Age), sd_age = sd(CUSTOM_Age),
             percent_female = sum(Gender == "Female")/n()*100, family_history_AD = sum(CUSTOM_Fam._hist._Atopic_dermatitis == TRUE, na.rm = TRUE)/n()*100, family_history_PSO = sum(CUSTOM_Family_History_of_Psoriasis == TRUE, na.rm = TRUE)/n()*100)
 
-# hospitals
+# hospitals 
 table(alldata$clinical_group, alldata$Institution)
 
 # allergy data
@@ -104,6 +106,7 @@ ggplot(data = fulldata, aes(y = patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD
 # sample identifier for lesional skin: involved.skin.biopsy.involved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier. , column 262
 ```
 
+
 ```{r}
 # transcriptomics data
 str(omicsdata)
@@ -111,8 +114,6 @@ dim(omicsdata)
 colnames(omicsdata)[1:10]
 rownames(omicsdata)[1:10]
 
-# see as an example which samples were analyzed from patient MAARS_3_018
-names(omicsdata)[grep("MAARS_3_018.", x = names(omicsdata))]
 
 
 # build annotation dataset
@@ -133,20 +134,27 @@ DGE <- DGEList(counts = omicsdata, samples = annotations, genes = rownames(omics
 
 # try some clustering
 deucl_norm <- dist(t(omicsdata)) # takes a lot of time to compute, this is why I saved it in a txt file
-deucl_norm <- as.dist(as.matrix(scan("expr_distance.txt")))
+# deucl_norm <- as.dist(as.matrix(scan("expr_distance.txt"))) # file is not in the correct format
 
 plot(deucl_norm)
 
-annotations$dend_col[annotations$Institution == "HHU"] <- "green"
-annotations$dend_col[annotations$clinical_group == "KINGS"] <- "blue"
-annotations$dend_col[annotations$clinical_group == "UH"] <- "red" 
+annotations$dend_colH[annotations$Institution == "HHU"] <- "#E41A1C"
+annotations$dend_colH[annotations$Institution == "KINGS"] <- "#377EB8"
+annotations$dend_colH[annotations$Institution == "UH"] <- "#4DAF4A"
+
+annotations$dend_colC[annotations$clinical_group == "AD"] <- "#E41A1C"
+annotations$dend_colC[annotations$clinical_group == "CTRL"] <- "#377EB8"
+annotations$dend_colC[annotations$clinical_group == "PSO"] <- "#4DAF4A" 
   
 plot(flashClust::hclust(deucl_norm, method = "ward"), labels = annotations$clinical_group)
-plot(flashClust::hclust(deucl_norm, method = "ward"), labels = annotations$lesional)
+# plot(flashClust::hclust(deucl_norm, method = "ward"), labels = annotations$lesional)
 
+# plot by hospital
+dend <- flashClust::hclust(deucl_norm, method = "ward") %>% as.dendrogram
+dend %>% set("labels", "") %>% set("leaves_pch", 19) %>% set("leaves_col", annotations$dend_colH) %>% plot(main = "Clustering with Ward method") %>% legend(x = "topright", legend = c("HHU", "KINGS", "UH"), col = c("#E41A1C", "#377EB8", "#4DAF4A"), pch = 16, title = "Hospital")
 
-dend <- hclust(deucl_norm, method = "ward") %>% as.dendrogram
-dend %>% set("labels", "") %>% set("leaves_pch", 19) %>% set("leaves_col", annotations$dend_col) %>% plot() 
+# plot by clinical group
+dend %>% set("labels", "") %>% set("leaves_pch", 19) %>% set("leaves_col", annotations$dend_colH) %>% plot(main = "Clustering with Ward method") %>% legend(x = "topright", legend = c("AD", "CTRL", "PSO"), col = c("#E41A1C", "#377EB8", "#4DAF4A"), pch = 16, title = "Clinical group")
 
   
 # create model matrix
@@ -169,3 +177,38 @@ genelist_edgeR_lfc1 <- DGE_commondisp$genes$genes[as.logical(signif_edgeR_lfc1)]
 
 ```
 
+# build table for descriptive statistics
+```{r}
+# sum up some potential confounding factors
+alldata_demographics <- alldata %>% group_by(alldata$clinical_group) %>% 
+  summarise(n_distinct = n_distinct(MAARS_identifier), mean_age = round(mean(CUSTOM_Age), 2), sd_age = round(sd(CUSTOM_Age), 2),
+            percent_female = sum(Gender == "Female")/n()*100, family_history_AD = sum(CUSTOM_Fam._hist._Atopic_dermatitis == TRUE, na.rm = TRUE)/n()*100, family_history_PSO = sum(CUSTOM_Family_History_of_Psoriasis == TRUE, na.rm = TRUE)/n()*100) %>% mutate(mean_sd_age = paste0(mean_age, " (", sd_age, ")"))
+
+# allergies
+# add column that specifies any allergy
+alldata$allergy <- ifelse(rowSums(alldata[, 10:16]) > 0, TRUE, FALSE)
+
+alldata_allergy <- alldata %>% group_by(alldata$clinical_group) %>% 
+  summarise(any_allergy = sum(allergy)/n()*100, allergy_pseudo_drug = sum(Known_Allergies_v2..Pseudo_Drug_Allergy == TRUE)/n()*100, allergy_dustmite = sum(Known_Allergies_v2..House_dust_mite == TRUE)/n()*100, allergy_food = sum(Known_Allergies_v2..Food == TRUE)/n()*100, allergy_pollen = sum(Known_Allergies_v2..Pollen == TRUE)/n()*100, allergy_contact = sum(Known_Allergies_v2..Contact_Allergy == TRUE)/n()*100, allergy_drug = sum(Known_Allergies_v2..Drug_Allergy == TRUE)/n()*100, allergy_animal = sum(Known_Allergies_v2..Animal == TRUE)/n()*100)
+
+# chronic diseases
+alldata_diseases <- alldata %>% group_by(alldata$clinical_group) %>% 
+  summarise(hyperlipidemia = sum(Other_concurrent_chronic_diseases_v2..Hyperlipidemia == TRUE)/n()*100, other_diseases = sum(Other_concurrent_chronic_diseases_v2..Others == TRUE)/n()*100,  diabetes_non_insulin = sum(Other_concurrent_chronic_diseases_v2..Diabetes_.non.insulin. == TRUE)/n()*100,  thyroid_dysfunction = sum(Other_concurrent_chronic_diseases_v2..Thyroid_dysfunction == TRUE)/n()*100,  asthma = sum(Other_concurrent_chronic_diseases_v2..Asthma == TRUE)/n()*100,  hypertension = sum(Other_concurrent_chronic_diseases_v2..Hypertension == TRUE)/n()*100)
+
+# medication
+alldata_medication <- alldata %>% group_by(alldata$clinical_group) %>% 
+  summarise(anti_hypertensive = sum(Concomitant_Medication_v2..Anti.Hypertensive == TRUE)/n()*100, anti_inflammatory = sum(Concomitant_Medication_v2..Anti.Inflammatory.non_steroid. == TRUE)/n()*100, other_hormones = sum(Concomitant_Medication_v2..Other_hormones == TRUE)/n()*100, thyroid_hormones = sum(Concomitant_Medication_v2..Thyroid_hormones == TRUE)/n()*100, statins = sum(Concomitant_Medication_v2..Statins == TRUE)/n()*100, insulin = sum(Concomitant_Medication_v2..Insulin == TRUE)/n()*100, other_medication = sum(Concomitant_Medication_v2..Others == TRUE)/n()*100)
+
+SCORAD <- annotations %>% group_by(clinical_group) %>% filter(lesional == "LES") %>% summarize(mean_SCORAD = round(mean(SCORAD_Score), 2), sd_SCORAD = round(sd(SCORAD_Score), 2))
+ctrl <- c("CTRL", 0, 0)
+SCORAD <- rbind(SCORAD, ctrl) %>% mutate(mean_sd_SCORAD = paste0(mean_SCORAD, " (", sd_SCORAD, ")"))
+
+# combine all into one table
+datatable <- as.data.frame(rbind(t(alldata_demographics), t(alldata_allergy), t(alldata_diseases), t(alldata_medication)))
+colnames(datatable) <- c("AD", "CTRL", "PSO")
+
+datatable <- subset(datatable, rownames(datatable) %!in% c("alldata.clinical_group", "alldata.clinical_group.1", "mean_age", "sd_age", "alldata.clinical_group.2", "alldata.clinical_group.3"))
+
+rownames(datatable) <- c("Count", "gender (% female)", "family history of AD", "family history of PSO", "age (sd)", "any allergy (%)",
+                         "pseudo drugs allergy (%)", "dustmites allergy(%)", "food allergy (%)", "pollen allergy (%)", )
+```
