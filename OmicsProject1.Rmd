@@ -44,6 +44,25 @@ names(alldata)
 names(fulldata) #this dataset is a nightmare, look at all those terrible variable names
 ```
 
+# clean and subset the data
+```{r}
+#define function %!in% as opposite of %in% - I realized I actually don't need that
+`%!in%` <- function(a,b) ! a %in% b
+
+## remove all samples from alldata that are not used in microarray
+alldata <- alldata %>% filter(sample_id %in% colnames(omicsdata))
+
+## remove all patientes from fulldata that are not subjected to microarray analysis
+fulldata <- fulldata %>% filter(fulldata$patient.Identification.MAARS.identifier..MAARS_identifier. %in% annotations$MAARS_identifier)
+
+# separate alldata based on clinical group
+alldata_ad <- alldata %>% filter(clinical_group == "AD")
+alldata_ctrl <- alldata %>% filter(clinical_group == "CTRL")
+alldata_pso <- alldata %>% filter(clinical_group == "PSO")
+
+alldata_ad_ctrl <- alldata %>% filter(clinical_group == "AD" | clinical_group == "CTRL")
+```
+
 # Some descriptive stats of basic data
 ```{r}
 # number of samples per group
@@ -51,10 +70,14 @@ alldata %>% group_by(alldata$clinical_group) %>% summarise(n = n())
 # number of participants per group
 alldata %>% group_by(alldata$clinical_group) %>% summarise(n_distinct = n_distinct(MAARS_identifier))
 
+
 # sum up some potential confounding factors
 alldata %>% group_by(alldata$clinical_group) %>% 
   summarise(n_distinct = n_distinct(MAARS_identifier), mean_age = mean(CUSTOM_Age), sd_age = sd(CUSTOM_Age),
             percent_female = sum(Gender == "Female")/n()*100, family_history_AD = sum(CUSTOM_Fam._hist._Atopic_dermatitis == TRUE, na.rm = TRUE)/n()*100, family_history_PSO = sum(CUSTOM_Family_History_of_Psoriasis == TRUE, na.rm = TRUE)/n()*100)
+
+# hospitals
+table(alldata$clinical_group, alldata$Institution)
 
 # allergy data
 alldata %>% group_by(alldata$clinical_group) %>% 
@@ -109,8 +132,8 @@ annotations$lesional <- relevel(annotations$lesional, ref = "NON_LES")
 DGE <- DGEList(counts = omicsdata, samples = annotations, genes = rownames(omicsdata))
 
 # try some clustering
-# deucl_norm <- dist(t(omicsdata)) takes a lot of time to compute, this is why I saved it in a txt file
-deucl_norm <- scan("expr_distance.txt")
+deucl_norm <- dist(t(omicsdata)) # takes a lot of time to compute, this is why I saved it in a txt file
+deucl_norm <- as.dist(as.matrix(scan("expr_distance.txt")))
 
 plot(deucl_norm)
 
