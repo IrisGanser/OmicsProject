@@ -27,6 +27,7 @@ library(GEOquery)
 library(dendextend)
 library(RColorBrewer)
 library(knitr)
+library(kableExtra)
 
 
 # load data from my local files
@@ -182,33 +183,41 @@ genelist_edgeR_lfc1 <- DGE_commondisp$genes$genes[as.logical(signif_edgeR_lfc1)]
 # sum up some potential confounding factors
 alldata_demographics <- alldata %>% group_by(alldata$clinical_group) %>% 
   summarise(n_distinct = n_distinct(MAARS_identifier), mean_age = round(mean(CUSTOM_Age), 2), sd_age = round(sd(CUSTOM_Age), 2),
-            percent_female = sum(Gender == "Female")/n()*100, family_history_AD = sum(CUSTOM_Fam._hist._Atopic_dermatitis == TRUE, na.rm = TRUE)/n()*100, family_history_PSO = sum(CUSTOM_Family_History_of_Psoriasis == TRUE, na.rm = TRUE)/n()*100) %>% mutate(mean_sd_age = paste0(mean_age, " (", sd_age, ")"))
+            percent_female = round(sum(Gender == "Female")/n()*100, 2), family_history_AD = round(sum(CUSTOM_Fam._hist._Atopic_dermatitis == TRUE, na.rm = TRUE)/n()*100, 2), family_history_PSO = round(sum(CUSTOM_Family_History_of_Psoriasis == TRUE, na.rm = TRUE)/n()*100, 2)) %>% mutate(mean_sd_age = paste0(mean_age, " (", sd_age, ")"))
 
 # allergies
 # add column that specifies any allergy
 alldata$allergy <- ifelse(rowSums(alldata[, 10:16]) > 0, TRUE, FALSE)
 
 alldata_allergy <- alldata %>% group_by(alldata$clinical_group) %>% 
-  summarise(any_allergy = sum(allergy)/n()*100, allergy_pseudo_drug = sum(Known_Allergies_v2..Pseudo_Drug_Allergy == TRUE)/n()*100, allergy_dustmite = sum(Known_Allergies_v2..House_dust_mite == TRUE)/n()*100, allergy_food = sum(Known_Allergies_v2..Food == TRUE)/n()*100, allergy_pollen = sum(Known_Allergies_v2..Pollen == TRUE)/n()*100, allergy_contact = sum(Known_Allergies_v2..Contact_Allergy == TRUE)/n()*100, allergy_drug = sum(Known_Allergies_v2..Drug_Allergy == TRUE)/n()*100, allergy_animal = sum(Known_Allergies_v2..Animal == TRUE)/n()*100)
+  summarise(any_allergy = round(sum(allergy)/n()*100, 2), allergy_pseudo_drug = round(sum(Known_Allergies_v2..Pseudo_Drug_Allergy == TRUE)/n()*100, 2), allergy_dustmite = round(sum(Known_Allergies_v2..House_dust_mite == TRUE)/n()*100, 2), allergy_food = round(sum(Known_Allergies_v2..Food == TRUE)/n()*100, 2), allergy_pollen = round(sum(Known_Allergies_v2..Pollen == TRUE)/n()*100, 2), allergy_contact = round(sum(Known_Allergies_v2..Contact_Allergy == TRUE)/n()*100, 2), allergy_drug = round(sum(Known_Allergies_v2..Drug_Allergy == TRUE)/n()*100, 2), allergy_animal = round(sum(Known_Allergies_v2..Animal == TRUE)/n()*100, 2))
 
 # chronic diseases
 alldata_diseases <- alldata %>% group_by(alldata$clinical_group) %>% 
-  summarise(hyperlipidemia = sum(Other_concurrent_chronic_diseases_v2..Hyperlipidemia == TRUE)/n()*100, other_diseases = sum(Other_concurrent_chronic_diseases_v2..Others == TRUE)/n()*100,  diabetes_non_insulin = sum(Other_concurrent_chronic_diseases_v2..Diabetes_.non.insulin. == TRUE)/n()*100,  thyroid_dysfunction = sum(Other_concurrent_chronic_diseases_v2..Thyroid_dysfunction == TRUE)/n()*100,  asthma = sum(Other_concurrent_chronic_diseases_v2..Asthma == TRUE)/n()*100,  hypertension = sum(Other_concurrent_chronic_diseases_v2..Hypertension == TRUE)/n()*100)
+  summarise(hyperlipidemia = round(sum(Other_concurrent_chronic_diseases_v2..Hyperlipidemia == TRUE)/n()*100, 2), other_diseases = round(sum(Other_concurrent_chronic_diseases_v2..Others == TRUE)/n()*100, 2),  diabetes_non_insulin = round(sum(Other_concurrent_chronic_diseases_v2..Diabetes_.non.insulin. == TRUE)/n()*100, 2),  thyroid_dysfunction = round(sum(Other_concurrent_chronic_diseases_v2..Thyroid_dysfunction == TRUE)/n()*100, 2),  asthma = round(sum(Other_concurrent_chronic_diseases_v2..Asthma == TRUE)/n()*100, 2),  hypertension = round(sum(Other_concurrent_chronic_diseases_v2..Hypertension == TRUE)/n()*100, 2))
 
 # medication
 alldata_medication <- alldata %>% group_by(alldata$clinical_group) %>% 
-  summarise(anti_hypertensive = sum(Concomitant_Medication_v2..Anti.Hypertensive == TRUE)/n()*100, anti_inflammatory = sum(Concomitant_Medication_v2..Anti.Inflammatory.non_steroid. == TRUE)/n()*100, other_hormones = sum(Concomitant_Medication_v2..Other_hormones == TRUE)/n()*100, thyroid_hormones = sum(Concomitant_Medication_v2..Thyroid_hormones == TRUE)/n()*100, statins = sum(Concomitant_Medication_v2..Statins == TRUE)/n()*100, insulin = sum(Concomitant_Medication_v2..Insulin == TRUE)/n()*100, other_medication = sum(Concomitant_Medication_v2..Others == TRUE)/n()*100)
+  summarise(anti_hypertensive = round(sum(Concomitant_Medication_v2..Anti.Hypertensive == TRUE)/n()*100, 2), anti_inflammatory = round(sum(Concomitant_Medication_v2..Anti.Inflammatory.non_steroid. == TRUE)/n()*100, 2), other_hormones = round(sum(Concomitant_Medication_v2..Other_hormones == TRUE)/n()*100, 2), thyroid_hormones = round(sum(Concomitant_Medication_v2..Thyroid_hormones == TRUE)/n()*100, 2), statins = round(sum(Concomitant_Medication_v2..Statins == TRUE)/n()*100, 2), insulin = round(sum(Concomitant_Medication_v2..Insulin == TRUE)/n()*100, 2), other_medication = round(sum(Concomitant_Medication_v2..Others == TRUE)/n()*100, 2))
 
 SCORAD <- annotations %>% group_by(clinical_group) %>% filter(lesional == "LES") %>% summarize(mean_SCORAD = round(mean(SCORAD_Score), 2), sd_SCORAD = round(sd(SCORAD_Score), 2))
 ctrl <- c("CTRL", 0, 0)
-SCORAD <- rbind(SCORAD, ctrl) %>% mutate(mean_sd_SCORAD = paste0(mean_SCORAD, " (", sd_SCORAD, ")"))
+SCORAD <- rbind(SCORAD, ctrl) %>% mutate(mean_sd_SCORAD = paste0(mean_SCORAD, " (", sd_SCORAD, ")")) %>% select(-c(mean_SCORAD, sd_SCORAD))
 
 # combine all into one table
 datatable <- as.data.frame(rbind(t(alldata_demographics), t(alldata_allergy), t(alldata_diseases), t(alldata_medication)))
-colnames(datatable) <- c("AD", "CTRL", "PSO")
 
 datatable <- subset(datatable, rownames(datatable) %!in% c("alldata.clinical_group", "alldata.clinical_group.1", "mean_age", "sd_age", "alldata.clinical_group.2", "alldata.clinical_group.3"))
 
-rownames(datatable) <- c("Count", "gender (% female)", "family history of AD", "family history of PSO", "age (sd)", "any allergy (%)",
-                         "pseudo drugs allergy (%)", "dustmites allergy(%)", "food allergy (%)", "pollen allergy (%)", )
+rownames(datatable) <- c("number of participants", "gender (% female)", "family history of AD", "family history of PSO", "age (sd)", "any allergy", "pseudo drugs allergy", "dustmites allergy", "food allergy", "pollen allergy", 
+                         "contact allergy", "drug allergy", "animal allergy", "hyperlipidemia", "other diseases", "non-insulin diabetes", "thyroid dysfunction", "asthma", "hypertension", "anti-hypertensive", "anti-inflammatory", "other hormones", "thyroid hormones", "statins", "insulin", "other medication")
+
+colnames(datatable) <- c("AD", "CTRL", "PSO")
+
+mean_SCORAD <- as.data.frame(matrix(c("50.61 (17.48)", 0, 0), nrow = 1))
+colnames(mean_SCORAD) <-  c("AD", "CTRL", "PSO")
+rownames(mean_SCORAD) <- "mean SCORAD score in lesions (sd)"
+datatable <- rbind(datatable, mean_SCORAD)
+
+kable(datatable) %>% pack_rows("Demographic information", 2, 5) %>% pack_rows("Allergies (%)", 6, 13) %>% pack_rows("Chronic diseases (%)", 14, 19) %>% pack_rows("Medication (%)", 20, 26) %>% pack_rows("SCORAD score", 27, 27)  %>%  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
 ```
