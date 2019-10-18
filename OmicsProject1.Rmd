@@ -28,6 +28,7 @@ library(dendextend)
 library(RColorBrewer)
 library(knitr)
 library(kableExtra)
+library(FactoMineR)
 
 
 # load data from my local files
@@ -125,6 +126,19 @@ annotations <- dplyr::left_join(annotations, alldata, by = "sample_id") %>% sele
 annotations <- dplyr::left_join(annotations, fulldata, by = c("sample_id" = "involved.skin.biopsy.involved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier.")) %>% select(sample_id, MAARS_identifier, clinical_group, lesional, CUSTOM_Age, Gender, Institution, patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)  %>% rename(SCORAD_Score = patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)
 annotations$SCORAD_Score[is.na(annotations$SCORAD_Score)] <- 0
 
+annotations$SCORAD_severity[annotations$SCORAD_Score < 25] <- "mild"
+annotations$SCORAD_severity[annotations$SCORAD_Score < 50 & annotations$SCORAD_Score > 25] <- "moderate"
+annotations$SCORAD_severity[annotations$SCORAD_Score > 50] <- "severe"
+annotations$SCORAD_severity[annotations$SCORAD_Score == 0] <- "no eczema"
+annotations$SCORAD_severity <- as.factor(annotations$SCORAD_severity)
+
+annotations$sample_group[annotations$clinical_group == "AD" & annotations$lesional == "LES"] <- "AD lesional"
+annotations$sample_group[annotations$clinical_group == "AD" & annotations$lesional == "NON_LES"] <- "AD non-lesional"
+annotations$sample_group[annotations$clinical_group == "PSO" & annotations$lesional == "LES"] <- "PSO lesional"
+annotations$sample_group[annotations$clinical_group == "PSO" & annotations$lesional == "NON_LES"] <- "PSO non-lesional"
+annotations$sample_group[annotations$clinical_group == "CTRL"] <- "CTRL"
+annotations$sample_group<- as.factor(annotations$sample_group)
+
 # relevel the dataset so that R picks the correct reference classes later on
 annotations$clinical_group <- relevel(annotations$clinical_group, ref = "CTRL")
 annotations$lesional <- relevel(annotations$lesional, ref = "NON_LES")
@@ -172,7 +186,7 @@ signif_edgeR_lfc0 <- decideTestsDGE(lrt, adjust.method = "BH", p.value = 0.05, l
 summary(signif_edgeR_lfc0)
 genelist_edgeR_lfc0 <- DGE_commondisp$genes$genes[as.logical(signif_edgeR_lfc0)]
 
-signif_edgeR_lfc1 <- decideTestsDGE(lrt, adjust.method = "BH", p.value = 0.05, lfc = 1)
+signif_edgeR_lfc1 <- decideTestsDGE(lrt, adjust.method = "BH", p.value = 0.05, lfc = 0.58)
 summary(signif_edgeR_lfc1)
 genelist_edgeR_lfc1 <- DGE_commondisp$genes$genes[as.logical(signif_edgeR_lfc1)]
 
@@ -209,7 +223,7 @@ datatable <- as.data.frame(rbind(t(alldata_demographics), t(alldata_allergy), t(
 
 datatable <- subset(datatable, rownames(datatable) %!in% c("alldata.clinical_group", "alldata.clinical_group.1", "mean_age", "sd_age", "alldata.clinical_group.2", "alldata.clinical_group.3"))
 
-rownames(datatable) <- c("number of participants", "gender (% female)", "family history of AD", "family history of PSO", "age (sd)", "any allergy", "pseudo drugs allergy", "dustmites allergy", "food allergy", "pollen allergy", 
+rownames(datatable) <- c("number of participants", "gender (% female)", "family history of AD (%)", "family history of PSO (%)", "age (sd)", "any allergy", "pseudo drugs allergy", "dustmites allergy", "food allergy", "pollen allergy", 
                          "contact allergy", "drug allergy", "animal allergy", "hyperlipidemia", "other diseases", "non-insulin diabetes", "thyroid dysfunction", "asthma", "hypertension", "anti-hypertensive", "anti-inflammatory", "other hormones", "thyroid hormones", "statins", "insulin", "other medication")
 
 colnames(datatable) <- c("AD", "CTRL", "PSO")
@@ -220,4 +234,21 @@ rownames(mean_SCORAD) <- "mean SCORAD score in lesions (sd)"
 datatable <- rbind(datatable, mean_SCORAD)
 
 kable(datatable) %>% pack_rows("Demographic information", 2, 5) %>% pack_rows("Allergies (%)", 6, 13) %>% pack_rows("Chronic diseases (%)", 14, 19) %>% pack_rows("Medication (%)", 20, 26) %>% pack_rows("SCORAD score", 27, 27)  %>%  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+subset_datatable <- datatable[c(1:13, 27), ]
+kable(subset_datatable) %>% pack_rows("Demographic information", 2, 5) %>% pack_rows("Allergies (%)", 6, 13) %>% pack_rows("SCORAD score", 14, 14)  %>%  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
 ```
+
+
+# try a PCA
+```{r}
+df_PCA <- data.frame(t(omicsdata)[, -1], subset(annotations, select = c(clinical_group, lesional, sample_group)))
+PCA_AD <- PCA(df_PCA, quali.sup = which(names(df_PCA) %in% c("clinical_group", "lesional", "sample_group"))) 
+# don't look at the plots here; this will make R die!!!!!
+
+plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "clinical_group"))
+plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "lesional"))
+plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "sample_group"))
+
+```
+
