@@ -143,6 +143,7 @@ annotations$sample_group<- as.factor(annotations$sample_group)
 annotations$clinical_group <- relevel(annotations$clinical_group, ref = "CTRL")
 annotations$lesional <- relevel(annotations$lesional, ref = "NON_LES")
 
+annotations1 <- annotations[order(annotations$MAARS_identifier), ]
 
 # set up DGE sheet for annotations
 DGE <- DGEList(counts = omicsdata, samples = annotations, genes = rownames(omicsdata))
@@ -174,6 +175,7 @@ dend %>% set("labels", "") %>% set("leaves_pch", 19) %>% set("leaves_col", annot
   
 # create model matrix
 design <- as.data.frame(model.matrix(~lesional, data = annotations))
+colnames(design) <- c("Intercept", "lesional")
 
 # add common dispersion factor to the gene expression data
 DGE_commondisp <- edgeR::estimateCommonDisp(DGE)
@@ -242,13 +244,30 @@ kable(subset_datatable) %>% pack_rows("Demographic information", 2, 5) %>% pack_
 
 # try a PCA
 ```{r}
-df_PCA <- data.frame(t(omicsdata)[, -1], subset(annotations, select = c(clinical_group, lesional, sample_group)))
-PCA_AD <- PCA(df_PCA, quali.sup = which(names(df_PCA) %in% c("clinical_group", "lesional", "sample_group"))) 
+df_PCA <- data.frame(t(omicsdata)[, -1], subset(annotations, select = c(clinical_group, lesional, sample_group, Institution)))
+PCA_AD <- PCA(df_PCA, quali.sup = which(names(df_PCA) %in% c("clinical_group", "lesional", "sample_group", "Institution"))) 
 # don't look at the plots here; this will make R die!!!!!
 
 plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "clinical_group"))
 plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "lesional"))
 plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "sample_group"))
+plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "Institution"), ellipse = )
 
+```
+
+# fit a model to find out which genes are significant with the limma package
+```{r}
+
+# fit the gaussian linear model 
+fit <- lmFit(omicsdata, design)
+Bayesfit <- eBayes(fit)
+voomlimma_signif <- decideTests(Bayesfit, adjust.method = "BH", p.value = 0.05, lfc = 0.5849)
+summary(voomlimma_signif)
+
+res <- topTable(Bayesfit, coef="lesional", confint=0.95) # 95% CIs for the log-fold changes
+keep <- res$CI.L > -1 & res$CI.R < 1
+res[keep,]
+
+topTable(Bayesfit, adjust="BH", p.value = 0.05, lfc = 0.5849, coef = "lesional")
 ```
 
