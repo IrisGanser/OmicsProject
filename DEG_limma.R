@@ -22,8 +22,6 @@ omicsdata <- read.delim("~/Documents/Omics/Project/OmicsProject/M2PHDS_19-20_OMI
 # remove all samples from alldata that are not used in microarray
 alldata <- alldata %>% filter(sample_id %in% colnames(omicsdata))
 
-# remove all patientes from fulldata that are not subjected to microarray analysis
-fulldata <- fulldata %>% filter(fulldata$patient.Identification.MAARS.identifier..MAARS_identifier. %in% annotations$MAARS_identifier)
 
 # separate alldata based on clinical group
 alldata_ad <- alldata %>% filter(clinical_group == "AD")
@@ -67,23 +65,29 @@ summary(annotations$sample_group)
 summary(annotations$clinical_group)
 # there are 83 AD lesional skin samples and 81 AD non-lesional skin samples 
 
+# remove all patientes from fulldata that are not subjected to microarray analysis
+fulldata <- fulldata %>% filter(fulldata$patient.Identification.MAARS.identifier..MAARS_identifier. %in% annotations$MAARS_identifier)
+
 
 ### build model matrix ###
 # select only AL (AD lesional) samples
 annotations_AL <- filter(annotations, sample_group == "AD lesional")
+annotations_AL$SCORAD_severity <- factor(annotations_AL$SCORAD_severity)
+annotations_AL$SCORAD_severity <- ordered(annotations_AL$SCORAD_severity, levels=c("mild", "moderate", "severe"))
+
 omicsdata_AL <- omicsdata[, colnames(omicsdata) %in% annotations_AL$sample_id]
 
 DGE_AL <- DGEList(counts = omicsdata_AL, samples = annotations_AL, genes = rownames(omicsdata))
 
 # model matrix
-design_AL <- as.data.frame(model.matrix(~SCORAD_Score, data = annotations))
+design_AL <- as.data.frame(model.matrix(~SCORAD_Score, data = annotations_AL))
 
 
 # fit the linear model
 fit <- lmFit(omicsdata_AL, design_AL)
 Bayesfit <- eBayes(fit)
 volcanoplot(Bayesfit, coef = 2)
-AL_signif <- decideTests(Bayesfit, adjust.method = "BH", p.value = 0.05, lfc = log2(1.02))
+AL_signif <- decideTests(Bayesfit, adjust.method = "BH", p.value = 0.05, lfc = log2(1.01))
 # lfc is very small because it is only the change in 1 unit of SCORAD score, have to find optimal lfc value!
 summary(AL_signif)
 
@@ -94,8 +98,9 @@ up_AL <- which(AL_signif[, 2] == 1) # 1 is upregulated, 0 not significant, -1 is
 upGenes_AL <- DGE_AL$genes$genes[up_AL]
 upGenes_AL
 
-# upTable <- topTable(upGenes, adjust.method= "BH", sort.by="p", n = 100) 
-# questionable to do this, I don't know what the output really means and why I could put topGenes as model input
+upTable <- topTable(Bayesfit, adjust.method= "BH", sort.by="p", n = Inf)
+upTable$Ensembl <- rownames(upTable)
+upTable <- filter(upTable, Ensembl %in% upGenes_AL)
 
 
 # get significantly downregulated genes
@@ -103,6 +108,11 @@ down_AL <- which(AL_signif[, 2] == -1) # 1 is upregulated, 0 not significant, -1
 # column 1 is intercept, col 2 is SCORAD_Score 
 downGenes_AL <- DGE_AL$genes$genes[down_AL]
 downGenes_AL
+
+downTable <- topTable(Bayesfit, adjust.method= "BH", sort.by="p", n = Inf)
+downTable$Ensembl <- rownames(downTable)
+downTable <- filter(downTable, Ensembl %in% downGenes_AL)
+
 
 # see if the most differentially expressed gene is linearly associated with SCORAD  
 gene <- data.frame(t(omicsdata[upGenes_AL[1], ]))
@@ -113,4 +123,51 @@ plot(gene$SCORAD_Score, gene$ENSG00000153993_at)
 lm <- lm(gene$ENSG00000003400_at ~ SCORAD_Score, data = gene)
 summary(lm)
 
-## to do: get topTable to work, so I can look at lfc and p-value in one table
+
+
+
+### SCORAD as categorical variable ###
+
+# model matrix
+design_AL_cat <- as.data.frame(model.matrix(~SCORAD_severity, data = annotations_AL))
+# this is the solution for an ordinal variable, results in a very weird design matrix, have to do more research on this if it is actually applicable
+# first column should indicate linear trend, second quadratic trend
+
+# fit the linear model
+fit_cat <- lmFit(omicsdata_AL, design_AL_cat)
+Bayesfit_cat <- eBayes(fit_cat)
+volcanoplot(Bayesfit_cat, coef = 2)
+AL_signif_cat <- decideTests(Bayesfit_cat, adjust.method = "BH", p.value = 0.05, lfc = log2(1.2))
+summary(AL_signif_cat)
+
+
+# get significantly upregulated genes 
+up_AL_cat <- which(AL_signif_cat[, 2] == 1) # 1 is upregulated, 0 not significant, -1 is downregulated
+# column 1 is intercept, col 2 is SCORAD_Score moderate, col 3 is SCORAD_Score severe
+upGenes_AL_cat <- DGE_AL$genes$genes[up_AL_cat]
+upGenes_AL_cat
+
+upTable_cat <- topTable(Bayesfit_cat, adjust.method= "BH", n = Inf)
+upTable_cat$Ensembl <- rownames(upTable_cat)
+upTable_cat <- filter(upTable_cat, Ensembl %in% upGenes_AL_cat)
+
+
+# get significantly downregulated genes
+down_AL_cat <- which(AL_signif_cat[, 2] == -1) # 1 is upregulated, 0 not significant, -1 is downregulated
+# column 1 is intercept, col 2 is SCORAD_Score 
+downGenes_AL_cat <- DGE_AL$genes$genes[down_AL_cat]
+downGenes_AL_cat
+
+downTable_cat <- topTable(Bayesfit_cat, adjust.method= "BH", n = Inf)
+downTable_cat$Ensembl <- rownames(downTable_cat)
+downTable_cat <- filter(downTable_cat, Ensembl %in% downGenes_AL_cat)
+
+
+
+### see which genes are regulated in both analyses
+up_both <- intersect(upGenes_AL, upGenes_AL_cat)
+up_both
+
+down_both <- intersect(downGenes_AL, downGenes_AL_cat)
+down_both
+# not very satisfying results
