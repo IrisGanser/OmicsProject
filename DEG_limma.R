@@ -73,7 +73,7 @@ fulldata <- fulldata %>% filter(fulldata$patient.Identification.MAARS.identifier
 # select only AL (AD lesional) samples
 annotations_AL <- filter(annotations, sample_group == "AD lesional")
 annotations_AL$SCORAD_severity <- factor(annotations_AL$SCORAD_severity)
-annotations_AL$SCORAD_severity <- ordered(annotations_AL$SCORAD_severity, levels=c("mild", "moderate", "severe"))
+# annotations_AL$SCORAD_severity <- ordered(annotations_AL$SCORAD_severity, levels=c("mild", "moderate", "severe"))
 
 omicsdata_AL <- omicsdata[, colnames(omicsdata) %in% annotations_AL$sample_id]
 
@@ -101,7 +101,7 @@ upGenes_AL
 upTable <- topTable(Bayesfit, adjust.method= "BH", sort.by="p", n = Inf)
 upTable$Ensembl <- rownames(upTable)
 upTable <- filter(upTable, Ensembl %in% upGenes_AL)
-
+upTable
 
 # get significantly downregulated genes
 down_AL <- which(AL_signif[, 2] == -1) # 1 is upregulated, 0 not significant, -1 is downregulated
@@ -114,15 +114,15 @@ downTable$Ensembl <- rownames(downTable)
 downTable <- filter(downTable, Ensembl %in% downGenes_AL)
 
 
-# see if the most differentially expressed gene is linearly associated with SCORAD  
-gene <- data.frame(t(omicsdata[upGenes_AL[1], ]))
+# see if the most differentially expressed gene is linearly associated with SCORAD
+which(upGenes_AL == "ENSG00000256433_at")
+gene <- data.frame(t(omicsdata[upGenes_AL[57], ]))
 gene$sample_id <- rownames(gene)
 gene <- left_join(gene, annotations_AL, by = "sample_id") %>% na.omit(gene)
-plot(gene$SCORAD_Score, gene$ENSG00000007933_at)
+plot(gene$SCORAD_Score, gene$ENSG00000256433_at)
 
-lm <- lm(gene$ENSG00000007933_at ~ SCORAD_Score, data = gene)
+lm <- lm(gene$ENSG00000256433_at ~ SCORAD_Score, data = gene)
 summary(lm)
-
 
 
 
@@ -141,8 +141,8 @@ AL_signif_cat <- decideTests(Bayesfit_cat, adjust.method = "BH", p.value = 0.05,
 summary(AL_signif_cat)
 
 
-# get significantly upregulated genes 
-up_AL_cat <- which(AL_signif_cat[, 2] == 1) # 1 is upregulated, 0 not significant, -1 is downregulated
+# get significantly upregulated genes (only for severe)
+up_AL_cat <- which(AL_signif_cat[, 3] == 1) # 1 is upregulated, 0 not significant, -1 is downregulated
 # column 1 is intercept, col 2 is SCORAD_Score moderate, col 3 is SCORAD_Score severe
 upGenes_AL_cat <- DGE_AL$genes$genes[up_AL_cat]
 upGenes_AL_cat
@@ -152,8 +152,8 @@ upTable_cat$Ensembl <- rownames(upTable_cat)
 upTable_cat <- filter(upTable_cat, Ensembl %in% upGenes_AL_cat)
 
 
-# get significantly downregulated genes
-down_AL_cat <- which(AL_signif_cat[, 2] == -1) # 1 is upregulated, 0 not significant, -1 is downregulated
+# get significantly downregulated genes (only for severe)
+down_AL_cat <- which(AL_signif_cat[, 3] == -1) # 1 is upregulated, 0 not significant, -1 is downregulated
 # column 1 is intercept, col 2 is SCORAD_Score 
 downGenes_AL_cat <- DGE_AL$genes$genes[down_AL_cat]
 downGenes_AL_cat
@@ -167,7 +167,7 @@ downTable_cat <- filter(downTable_cat, Ensembl %in% downGenes_AL_cat)
 ### see which genes are regulated in both analyses
 up_both <- intersect(upGenes_AL, upGenes_AL_cat)
 up_both
-
+  
 down_both <- intersect(downGenes_AL, downGenes_AL_cat)
 down_both
 # not very satisfying results 
@@ -261,57 +261,28 @@ up_both_adj_unadj
 
 down_both_adj_unadj <- intersect(downGenes_AL, downGenes_AL_adj)
 down_both_adj_unadj
-
+  
 ## adjustment does not have a huge effect (most genes are similar between both analyses)
 
 ### see which genes are regulated in adjusted continuous and categorical analyses
-up_both_adj <- intersect(upGenes_AL_adj, upGenes_AL_cat_adj)
-up_both_adj
+up_both_adj_cat <- intersect(upGenes_AL_adj, upGenes_AL_cat_adj)
+up_both_adj_cat
 
-down_both_adj <- intersect(downGenes_AL_adj, downGenes_AL_cat_adj)
-down_both_adj
+down_both_adj_cat <- intersect(downGenes_AL_adj, downGenes_AL_cat_adj)
+down_both_adj_cat
 
 
-##### cross-validation
+# make volcanoplots pretty
+topTable <- topTable(Bayesfit, adjust.method= "BH", n = Inf)
+DEGTable <- rbind(upTable, downTable)
 
-#Randomly shuffle the data
-annotations_AL_shuffled <- annotations_AL[sample(nrow(annotations_AL)),]
-
-#Create 10 equally size folds
-folds <- cut(seq(1, nrow(annotations_AL_shuffled)), breaks=10, labels=FALSE)
-
-# initialze the list with up- and downregulated genes
-up_crossval <- vector("list", 10)
-down_crossval <- vector("list", 10)
-
-#Perform 10 fold cross validation
-for(i in 1:10){
-  #Segement your data by fold using the which() function 
-  testIndexes <- which(folds==i, arr.ind=TRUE)
-  valData <- annotations_AL_shuffled[testIndexes, ]
-  trainData <- annotations_AL_shuffled[-testIndexes, ]
+ggplot(data = topTable, aes(x = logFC, y = -log10(adj.P.Val))) +
+  geom_rect(aes(xmin = log2(1.01), xmax = Inf, ymin = min(-log10(DEGTable$adj.P.Val)), ymax = Inf), fill = "mistyrose1", alpha = 0.5) +
+  geom_rect(aes(xmin = -Inf, xmax = -log2(1.01), ymin = min(-log10(DEGTable$adj.P.Val)), ymax = Inf), fill = "mistyrose1", alpha = 0.5) +
+  geom_point(size = 0.5) +
+  geom_hline(yintercept = min(-log10(DEGTable$adj.P.Val)), col = "red") +
+  geom_vline(xintercept = c(log2(1.01), -log2(1.01)), col = "red") +
+  theme_bw() + 
+  theme(panel.border = element_rect(colour = "black", fill=NA, size=1)) +
+  labs(title = "Volcanoplot of DEG according to SCORAD score", x = "Log2 Fold Change", y = "-log10(adjusted p-value)")
   
-  # design matrix
-  design_AL_crossval <- as.data.frame(model.matrix(~SCORAD_Score, data = trainData))
-  omicsdata_crossval <- omicsdata_AL[colnames(omicsdata_AL) %in% trainData$sample_id]
-  
-  # fit the linear model
-  fit <- lmFit(omicsdata_crossval, design_AL_crossval)
-  Bayesfit <- eBayes(fit)
-  AL_signif_crossval <- decideTests(Bayesfit, adjust.method = "BH", p.value = 0.05, lfc = log2(1.01))
-  # lfc is very small because it is only the change in 1 unit of SCORAD score, have to find optimal lfc value!
-  
-  
-  # get significantly upregulated genes
-  up_AL_crossval <- which(AL_signif_crossval[, 2] == 1) # 1 is upregulated, 0 not significant, -1 is downregulated
-  # column 1 is intercept, col 2 is SCORAD_Score 
-  up_crossval[[i]] <- DGE_AL$genes$genes[up_AL_crossval]
-  
-  # get significantly downregulated genes
-  down_AL_crossval <- which(AL_signif_crossval[, 2] == -1) # 1 is upregulated, 0 not significant, -1 is downregulated
-  # column 1 is intercept, col 2 is SCORAD_Score 
-  down_crossval[[i]] <- DGE_AL$genes$genes[down_AL_crossval]
-  
-}
-
-## somehow now all the genes are non-significant, and I don't know if it's due to the reduced sample size or because sth else went wrong
