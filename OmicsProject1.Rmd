@@ -50,8 +50,7 @@ names(fulldata) #this dataset is a nightmare, look at all those terrible variabl
 
 # clean and subset the data
 ```{r}
-#define function %!in% as opposite of %in% - I realized I actually don't need that now, but later
-`%!in%` <- function(a,b) ! a %in% b
+
 
 ## remove all samples from alldata that are not used in microarray
 alldata <- alldata %>% filter(sample_id %in% colnames(omicsdata))
@@ -196,6 +195,9 @@ genelist_edgeR_lfc1 <- DGE_commondisp$genes$genes[as.logical(signif_edgeR_lfc1)]
 
 # build table for descriptive statistics
 ```{r}
+#define function %!in% as opposite of %in% 
+`%!in%` <- function(a,b) ! a %in% b
+
 # sum up some potential confounding factors
 alldata_demographics <- alldata %>% group_by(alldata$clinical_group) %>% 
   summarise(n_distinct = n_distinct(MAARS_identifier), mean_age = round(mean(CUSTOM_Age), 2), sd_age = round(sd(CUSTOM_Age), 2),

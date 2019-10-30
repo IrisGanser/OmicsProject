@@ -99,9 +99,10 @@ upGenes_AL <- DGE_AL$genes$genes[up_AL]
 upGenes_AL
 
 upTable <- topTable(Bayesfit, adjust.method= "BH", sort.by="p", n = Inf)
-upTable$Ensembl <- rownames(upTable)
-upTable <- filter(upTable, Ensembl %in% upGenes_AL)
+upTable <- subset(upTable, rownames(upTable) %in% upGenes_AL)
 upTable
+
+
 
 # get significantly downregulated genes
 down_AL <- which(AL_signif[, 2] == -1) # 1 is upregulated, 0 not significant, -1 is downregulated
@@ -110,8 +111,8 @@ downGenes_AL <- DGE_AL$genes$genes[down_AL]
 downGenes_AL
 
 downTable <- topTable(Bayesfit, adjust.method= "BH", sort.by="p", n = Inf)
-downTable$Ensembl <- rownames(downTable)
-downTable <- filter(downTable, Ensembl %in% downGenes_AL)
+downTable <- subset(downTable, rownames(downTable) %in% downGenes_AL)
+downTable 
 
 
 # see if the most differentially expressed gene is linearly associated with SCORAD
