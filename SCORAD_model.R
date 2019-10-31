@@ -2,12 +2,13 @@
 ### in order to do this, the DEG_limma.R script must be run first! ###
 
 # install required packages
-# install.packages("ComplexHeatmap")
+
 
 # load packages
-library("mixOmics")
+library(mixOmics)
 library(gplots)
 library(ComplexHeatmap)
+library(RColorBrewer)
 
 # not the outcome is the SCORAD and DEGs are explanatory factors
 
@@ -40,7 +41,7 @@ omicsdata_AL_DEG <- as.matrix(subset(omicsdata_AL, subset = rownames(omicsdata_A
 # topTable from DEGs only
 DEGtopTable <- rbind(upTable, downTable) %>% arrange(desc(logFC))
 
-heatmap.2(omicsdata_AL_DEG, trace = "none", density.info = "none")
+# heatmap.2(omicsdata_AL_DEG, trace = "none", density.info = "none")
 
 
 row_labels <- structure(ensembl2gene_DEG$GeneSymbol, names = ensembl2gene_DEG$EnsemblID) # to do: subset df so that only DEGs are in df!
@@ -53,19 +54,90 @@ row_ha <- HeatmapAnnotation("SCORAD" = anno_barplot(annotations_AL$SCORAD_Score,
                             annotation_name_gp = gpar(fontsize = 10, fontface = "bold"))
 Heatmap(omicsdata_AL_DEG, border = TRUE, column_title = "Samples", row_title = "Differentially expressed genes", 
         show_row_names = FALSE, column_labels = column_labels, row_names_gp = gpar(fontsize = 5),
+        clustering_method_rows = "complete", clustering_method_columns = "complete",
         column_names_gp = gpar(fontsize = 8), bottom_annotation = row_ha, 
         heatmap_legend_param = list(title = "normalized expression level", title_position = "leftcenter-rot", legend_height = unit(5, "cm")))
   
+### perform PCA descriptive analysis
+# df_PCA_AL <- data.frame(t(omicsdata_AL)[, -1], subset(annotations_AL, select = c(clinical_group, lesional, sample_group, Institution, SCORAD_Score, SCORAD_severity)))
+PCA_AL <- pca(t(omicsdata_AL)[, -1])
+plotIndiv(PCA_AL, group = annotations_AL$SCORAD_severity, legend = TRUE, pch = 16, ind.names = FALSE, 
+          title = "PCA of all genes in AL samples, comp 1 & 2")
 
-# perform PLS to reduce the number of dimensions
 
-splsda_DEG <- splsda(X = t(omicsdata_AL_DEG), Y = annotations_AL$SCORAD_Score, ncomp = 2, 
-                        keepX = rep(5, 2), mode = "regression") 
+### perform sPLS to reduce the number of dimensions
+# sPLS-DA for SCORAD as categorical variable
 
-plotIndiv(splsda_DEG, ind.names = annotations_AL$SCORAD_Score)
-plotVar(splsda_DEG, overlap = TRUE)
+splsda_DEG <- splsda(X = t(omicsdata_AL_DEG), Y = annotations_AL$SCORAD_severity, ncomp = 2, scale = TRUE, 
+                        keepX = rep(10, 2), mode = "regression") 
 
+plotIndiv(splsda_DEG, ind.names = annotations_AL$SCORAD_Score, legend = TRUE, ellipse = TRUE)
+plotVar(splsda_DEG, overlap = TRUE, var.names = FALSE)
 selectVar(splsda_DEG)
+auroc(splsda_DEG) # I don't know what this really means...  
+
+
+# categorical variable with SCORAD as 10-point categories
+annotations_AL$SCORAD_cat10 <- cut(annotations_AL$SCORAD_Score, breaks=c(-Inf, 25, 37.5, 50, 60, 70, 80, Inf), 
+                                   labels=c("<25", "25-37.5", "37.6-50", "50.1-60", "60.1-70", "70.1-80", ">80"), right = TRUE)
+# col_vector <- c("#4575B4","#91BFDB", "#E0F3F8", "#FFFFBF", "#FEE090", "#FC8D59", "#D73027")
+col_vector <- c("#FFEDA0", "#FED976", "#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#B10026")
+
+
+# sPLS for SCORAD as continuous variable
+dim(t(omicsdata_AL_DEG))
+SCORAD_df <- data.frame(annotations_AL$SCORAD_Score)
+dim(SCORAD_df)
+
+spls_DEG <- spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 10, keepX = rep(20, 10), scale = TRUE, mode = "regression")
+
+# spls tuning
+perf.pls <- perf(spls_DEG, validation = "loo", folds = 5, progressBar = FALSE)
+plot(perf.pls$Q2.total, type = "b", xlab = "Number of components", ylab = "Q2 total value", main = "Evolution the cross-validation error")
+perf.pls$Q2.total
+perf.pls$R2
+# according to this, chose 2 components
+
+list.keepX <- c(2:10, 15, 20)
+# tuning based on MAE
+
+tune.spls.MAE <- tune.spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 2, test.keepX = list.keepX, validation = "loo", 
+                           folds = 5, progressBar = FALSE, measure = 'MAE')
+plot(tune.spls.MAE, legend.position = 'topright')
+tune.spls.MAE$choice.keepX
+# keep 9 variables per component
+
+## optimized sPLS
+spls_DEG_tuned <- spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 2, keepX = rep(9, 2), scale = TRUE, mode = "regression")
+
+plotIndiv(spls_DEG_tuned, rep.space = "X-variate", ind.names = FALSE, pch = 16, group = annotations_AL$SCORAD_cat10, legend = TRUE,
+          col.per.group = col_vector, legend.title = "SCORAD Score", title = "sPLS of DEG with 2 comp, 9 variables per comp")
+plotVar(spls_DEG_tuned, cex = c(4, 4))
+
+var_comp1 <- selectVar(spls_DEG_tuned, comp = 1)
+var_comp2 <- selectVar(spls_DEG_tuned, comp = 2)
+
+DEG_spls <- c(var_comp1$X$name, var_comp2$X$name)
+
+
+## repeat heatmap with selected 18 genes
+DEG_spls_ID <- gsub("_at", "", DEG_spls)
+ensembl2gene_spls_DEG <- subset(ensembl2gene, EnsemblID %in% DEG_spls_ID)
+omicsdata_AL_spls_DEG <- as.matrix(subset(omicsdata_AL, subset = rownames(omicsdata_AL) %in% DEG_spls))
+
+row_labels <- structure(ensembl2gene_spls_DEG$GeneSymbol, names = ensembl2gene_spls_DEG$EnsemblID)
+column_labels <- structure(gsub("MAARS_", "", colnames(omicsdata_AL_spls_DEG)), names = colnames(omicsdata_AL_spls_DEG))
+
+
+row_ha <- HeatmapAnnotation("SCORAD" = anno_barplot(annotations_AL$SCORAD_Score, fill = "grey"), 
+                            annotation_name_gp = gpar(fontsize = 10, fontface = "bold"))
+Heatmap(omicsdata_AL_spls_DEG, border = TRUE, column_title = "Samples", row_title = "Differentially expressed genes", 
+        row_labels = row_labels, column_labels = column_labels, row_names_gp = gpar(fontsize = 8),
+        clustering_method_rows = "complete", clustering_method_columns = "complete",
+        column_names_gp = gpar(fontsize = 8), bottom_annotation = row_ha, 
+        heatmap_legend_param = list(title = "normalized expression level", title_position = "leftcenter-rot", legend_height = unit(5, "cm")))
+
+
 
 # build the dataframe for the model
 df_DEG <- data.frame(t(omicsdata_AL_DEG)) %>% mutate(sample_id = rownames(df_DEG))
