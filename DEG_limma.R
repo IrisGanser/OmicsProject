@@ -32,11 +32,12 @@ alldata_pso <- alldata %>% filter(clinical_group == "PSO")
 ## build annotation dataset
 sample_id <- colnames(omicsdata)
 annotations <- data.frame(sample_id = colnames(omicsdata), MAARS_identifier = gsub('.{3}$', '', sample_id))
-annotations <- dplyr::left_join(annotations, alldata, by = "sample_id") %>% select(sample_id, MAARS_identifier.x, clinical_group, lesional, CUSTOM_Age, Gender, Institution, allergy) %>% 
+annotations <- dplyr::left_join(annotations, alldata, by = "sample_id") %>% 
+  select(sample_id, MAARS_identifier.x, clinical_group, lesional, CUSTOM_Age, Gender, Institution, allergy, CUSTOM_Fam._hist._Atopic_dermatitis) %>% 
   rename(MAARS_identifier = MAARS_identifier.x)
 
 annotations <- dplyr::left_join(annotations, fulldata, by = c("sample_id" = "involved.skin.biopsy.involved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier.")) %>% 
-  select(sample_id, MAARS_identifier, clinical_group, lesional, CUSTOM_Age, Gender, Institution, patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score., allergy) %>% 
+  select(sample_id, MAARS_identifier, clinical_group, lesional, CUSTOM_Age, Gender, Institution, patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score., allergy, CUSTOM_Fam._hist._Atopic_dermatitis) %>% 
   rename(SCORAD_Score = patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)
 
 annotations$SCORAD_severity[annotations$SCORAD_Score < 25] <- "mild"
