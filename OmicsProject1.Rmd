@@ -170,7 +170,7 @@ dend %>% set("labels", "") %>% set("leaves_pch", 19) %>% set("leaves_col", annot
 
 # plot by clinical group
 dend %>% set("labels", "") %>% set("leaves_pch", 19) %>% set("leaves_col", annotations$dend_colH) %>% plot(main = "Clustering with Ward method") %>% legend(x = "topright", legend = c("AD", "CTRL", "PSO"), col = c("#E41A1C", "#377EB8", "#4DAF4A"), pch = 16, title = "Clinical group")
-
+  
   
 # create model matrix
 design <- as.data.frame(model.matrix(~lesional, data = annotations))
@@ -253,8 +253,13 @@ PCA_AD <- PCA(df_PCA, quali.sup = which(names(df_PCA) %in% c("clinical_group", "
 plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "clinical_group"))
 plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "lesional"))
 plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "sample_group"))
-plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "Institution"), ellipse = )
+plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "Institution"))
 
+# make PCA of AD lesional samples to see if they cluster according to SCORAD
+df_PCA_AL <- data.frame(t(omicsdata_AL)[, -1], subset(annotations_AL, select = c(clinical_group, lesional, sample_group, Institution, SCORAD_Score, SCORAD_severity)))
+
+PCA_AL <- PCA(df_PCA, quali.sup = which(names(df_PCA) %in% c("clinical_group", "lesional", "sample_group", "Institution", "SCORAD_Score", "SCORAD_severity")))
+plot(PCA_AL, choix = "ind", label = "none", habillage = which(names(df_PCA_AL) == "SCORAD_Score"))
 ```
 
 # fit a model to find out which genes are significant with the limma package
