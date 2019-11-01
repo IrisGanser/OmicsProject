@@ -6,7 +6,6 @@
 
 # load packages
 library(mixOmics)
-library(gplots)
 library(ComplexHeatmap)
 library(RColorBrewer)
 
@@ -26,12 +25,12 @@ ensembl2gene <- read.csv("~/Documents/Omics/Project/OmicsProject/ensembl2gene.tx
 ensembl2gene_DEG <- subset(ensembl2gene, EnsemblID %in% DEG_AL_unadj_ID)
 
 DEG_AL_unadj_name <- ensembl2gene_DEG$GeneSymbol
-
+list_DEG_AL <- data.frame(DEG_AL_unadj_ID, DEG_AL_unadj_name)
 
 # write them into txt file
 # write(DEG_AL_unadj_ID, "DEG_AL_unadj_ID.txt")
 # write(DEG_AL_unadj_name, "DEG_AL_unadj_name.txt")
-
+# write.table(list_DEG_AL, "list_DEG_AL.txt", quote = FALSE, row.names = FALSE)
 
 ### heatmap for differentially expressed genes
 
@@ -101,7 +100,7 @@ perf.pls$R2
 list.keepX <- c(2:10, 15, 20)
 # tuning based on MAE
 
-tune.spls.MAE <- tune.spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 2, test.keepX = list.keepX, validation = "loo", 
+tune.spls.MAE <- tune.spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 4, test.keepX = list.keepX, validation = "loo", 
                            folds = 5, progressBar = FALSE, measure = 'MAE')
 plot(tune.spls.MAE, legend.position = 'topright')
 tune.spls.MAE$choice.keepX
@@ -137,16 +136,34 @@ Heatmap(omicsdata_AL_spls_DEG, border = TRUE, column_title = "Samples", row_titl
         column_names_gp = gpar(fontsize = 8), bottom_annotation = row_ha, 
         heatmap_legend_param = list(title = "normalized expression level", title_position = "leftcenter-rot", legend_height = unit(5, "cm")))
 
+# spls_DEG_tuned$variates$X 
+# are these the values of the components? If so, can they be used in the final model?
+
+# extract the biggest loading values
+spls_DEG_loadings <- spls_DEG_tuned$loadings$X %>% as.data.frame() %>% mutate(geneID = spls_DEG_tuned$names$colnames$X)  %>%
+  filter(comp1 != 0 | comp2 != 0)
+
+# export the 17 genes in txt file
+# write.table(ensembl2gene_spls_DEG, "list_DEG_AL_spls.txt", quote = FALSE, row.names = FALSE)
 
 
+##### final SCORAD prediction model #####
 # build the dataframe for the model
-df_DEG <- data.frame(t(omicsdata_AL_DEG)) %>% mutate(sample_id = rownames(df_DEG))
-df_DEG <- select(df_DEG$sample_id, everything())
-df_DEG <- dplyr::left_join(df_DEG, annotations_AL, by = c(rownames(df_DEG) = "sample_id"))
+df_DEG <- data.frame(t(omicsdata_AL_DEG))
+df_DEG <- subset(df_DEG, select = colnames(df_DEG) %in% DEG_spls)
+df_DEG$sample_id = rownames(df_DEG)
+df_DEG <- dplyr::select(df_DEG, sample_id, everything())
+df_DEG <- dplyr::left_join(annotations_AL, df_DEG,  by = "sample_id")
 
+sum(is.na(df_DEG)) # no missing values
+names(df_DEG)
 
 # build a model
-m1 <- lm()
+m1 <- lm(as.formula(paste(colnames(df_DEG)[8], "~",
+                          paste(colnames(df_DEG)[c(5, 6, 9, 10, 16:30)], collapse = "+"), sep = "")),
+         data = df_DEG)
+
+summary(m1)
 
 
 
