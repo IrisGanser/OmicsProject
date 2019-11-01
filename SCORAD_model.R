@@ -8,6 +8,7 @@
 library(mixOmics)
 library(ComplexHeatmap)
 library(RColorBrewer)
+library(GGally)
 
 # not the outcome is the SCORAD and DEGs are explanatory factors
 
@@ -60,8 +61,9 @@ Heatmap(omicsdata_AL_DEG, border = TRUE, column_title = "Samples", row_title = "
 ### perform PCA descriptive analysis
 # df_PCA_AL <- data.frame(t(omicsdata_AL)[, -1], subset(annotations_AL, select = c(clinical_group, lesional, sample_group, Institution, SCORAD_Score, SCORAD_severity)))
 PCA_AL <- pca(t(omicsdata_AL)[, -1])
-plotIndiv(PCA_AL, group = annotations_AL$SCORAD_severity, legend = TRUE, pch = 16, ind.names = FALSE, 
-          title = "PCA of all genes in AL samples, comp 1 & 2")
+plotIndiv(PCA_AL, group = annotations_AL$SCORAD_severity, legend = TRUE, pch = annotations_AL$Institution, ind.names = FALSE, 
+          title = "PCA of all genes in AL samples, comp 1 & 2", legend.title.pch = "Institution", legend.title = "SCORAD Severity")
+
 
 
 ### perform sPLS to reduce the number of dimensions
@@ -153,20 +155,90 @@ df_DEG <- data.frame(t(omicsdata_AL_DEG))
 df_DEG <- subset(df_DEG, select = colnames(df_DEG) %in% DEG_spls)
 df_DEG$sample_id = rownames(df_DEG)
 df_DEG <- dplyr::select(df_DEG, sample_id, everything())
-df_DEG <- dplyr::left_join(annotations_AL, df_DEG,  by = "sample_id")
+
 
 sum(is.na(df_DEG)) # no missing values
 names(df_DEG)
 
-# build a model
-m1 <- lm(as.formula(paste(colnames(df_DEG)[8], "~",
-                          paste(colnames(df_DEG)[c(5, 6, 9, 10, 16:30)], collapse = "+"), sep = "")),
-         data = df_DEG)
 
+# some exploratory visualizations
+ggpairs(df_DEG, columns = c(8, 5, 6, 7, 9, 10, 11))
+ggpairs(df_DEG, columns = c(8, 16:30)) 
+boxplot(annotations_AL$SCORAD_severity ~ annotations_AL$Institution)
+# genes are all correlated individually with SCORAD (because we selected them this way!), but also correlated among each other
+
+## do univariate analyses of SCORAD against all other variables
+alldata_AL <- filter(alldata, lesional == "LES" & clinical_group == "AD")
+alldata_AL <- dplyr::left_join(alldata_AL, fulldata, by = c("sample_id" = "involved.skin.biopsy.involved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier."))%>% 
+  subset(select = c(1:33, 35, 51, 261)) %>% 
+  rename(SCORAD_Score = patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score., ethnicity = patient.Diagnostic...Phenotypic.Data.Ethnicity.Family.History.Ethnicity..Ethnicity.)
+alldata_AL$SCORAD_severity <- cut(alldata_AL$SCORAD_Score, breaks=c(-Inf, 25, 50, Inf), 
+                               labels=c("mild", "moderate", "severe"), right = FALSE)
+
+
+
+df_DEG <- dplyr::left_join(alldata_AL, df_DEG,  by = "sample_id")
+
+spls_comp <- data.frame(spls_DEG_tuned$variates$X) 
+spls_comp$sample_id <- rownames(spls_comp)
+df_DEG <- left_join(df_DEG, spls_comp,  by = "sample_id")
+
+
+variables <- names(alldata_AL)[c(7:29, 31:35)]
+
+fit_univariable <- list()
+# build univariate models based on this dataframe
+for (i in 1:length(variables)){
+ fit_univariable[[i]] <- lm(as.formula(paste("SCORAD_Score", "~", variables[i], sep = " ")), data = alldata_AL)
+}
+
+# extract coefficients and p-values
+lapply(fit_univariable, summary)
+# variables with p<0.2: Institution, Gender, Known_Allergies_v2..House_dust_mite, Known_Allergies_v2..Food, Known_Allergies_v2..Drug_Allergy,
+# Other_concurrent_chronic_diseases_v2..Asthma, CUSTOM_Fam._hist._Atopic_dermatitis, ethnicity
+
+# check model assumptions
+par(mfrow = c(2, 2))
+lapply(fit_univariable, plot)
+
+
+
+# build a model with only the genes
+m1 <- lm(as.formula(paste(colnames(df_DEG)[36], "~",
+                          paste(colnames(df_DEG)[38:54], collapse = "+"), sep = "")), data = df_DEG)
+par(mfrow = c(2, 2))
+plot(m1)
 summary(m1)
+# because of correlation between genes, only some of them are significant
 
+m2 <- lm(SCORAD_Score ~ comp1 + comp2, data = df_DEG)
+summary(m2)
 
+# build a model with DEG and clinical variables
+m3 <- lm(as.formula(paste(colnames(df_DEG)[36], "~",
+                          paste(colnames(df_DEG)[c(9, 11, 12, 15, 28, 33, 35, 38:54)], collapse = "+"), sep = "")), data = df_DEG)
+summary(m3)
 
+# remove gender, asthma, food allergy because of p-values 
+m4 <- lm(as.formula(paste(colnames(df_DEG)[36], "~",
+                          paste(colnames(df_DEG)[c(11, 15, 33, 35, 38:54)], collapse = "+"), sep = "")), data = df_DEG)
+summary(m4)
+anova(m3, m4)
+
+# remove ethnicity because of few participants in categories
+summary(df_DEG$ethnicity)
+m5 <- lm(as.formula(paste(colnames(df_DEG)[36], "~",
+                          paste(colnames(df_DEG)[c(11, 15, 33, 38:54)], collapse = "+"), sep = "")), data = df_DEG)
+summary(m5)
+anova(m4, m5) # no significant contribution of ethnicity to the model
+
+# remove dust mite allergy, family history, and drug allergy (all non-significant) => back to DEG only model
+
+## now try the same without individual genes, but with the components
+m6 <- lm(as.formula(paste(colnames(df_DEG)[36], "~", 
+                          paste(colnames(df_DEG)[c(9, 11, 12, 15, 28, 33, 35, 55, 56)], collapse = "+"), sep = "")), data = df_DEG)
+summary(m6)
+# same thing as the above model...
 
 
 ##### cross-validation
@@ -188,26 +260,7 @@ for(i in 1:10){
   valData <- annotations_AL_shuffled[testIndexes, ]
   trainData <- annotations_AL_shuffled[-testIndexes, ]
   
-  # design matrix
-  design_AL_crossval <- as.data.frame(model.matrix(~SCORAD_Score, data = trainData))
-  omicsdata_crossval <- omicsdata_AL[colnames(omicsdata_AL) %in% trainData$sample_id]
   
-  # fit the linear model
-  fit <- lmFit(omicsdata_crossval, design_AL_crossval)
-  Bayesfit <- eBayes(fit)
-  AL_signif_crossval <- decideTests(Bayesfit, adjust.method = "BH", p.value = 0.05, lfc = log2(1.01))
-  # lfc is very small because it is only the change in 1 unit of SCORAD score, have to find optimal lfc value!
-  
-  
-  # get significantly upregulated genes
-  up_AL_crossval <- which(AL_signif_crossval[, 2] == 1) # 1 is upregulated, 0 not significant, -1 is downregulated
-  # column 1 is intercept, col 2 is SCORAD_Score 
-  up_crossval[[i]] <- DGE_AL$genes$genes[up_AL_crossval]
-  
-  # get significantly downregulated genes
-  down_AL_crossval <- which(AL_signif_crossval[, 2] == -1) # 1 is upregulated, 0 not significant, -1 is downregulated
-  # column 1 is intercept, col 2 is SCORAD_Score 
-  down_crossval[[i]] <- DGE_AL$genes$genes[down_AL_crossval]
   
 }
 
