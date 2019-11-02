@@ -9,6 +9,7 @@ library(mixOmics)
 library(ComplexHeatmap)
 library(RColorBrewer)
 library(GGally)
+library(caret)
 
 # not the outcome is the SCORAD and DEGs are explanatory factors
 
@@ -241,27 +242,53 @@ summary(m6)
 # same thing as the above model...
 
 
-##### cross-validation
+## model calibration plots
+par(mfrow = c(1, 1))
+plot(m1$fitted.values, df_DEG$SCORAD_Score)
+abline(0, 1) # 45° line
+plot(m2$fitted.values, df_DEG$SCORAD_Score)
+abline(0, 1)
 
-#Randomly shuffle the data
-annotations_AL_shuffled <- annotations_AL[sample(nrow(annotations_AL)),]
 
-#Create 10 equally size folds
-folds <- cut(seq(1, nrow(annotations_AL_shuffled)), breaks=10, labels=FALSE)
+##### model evaluations
+### repeated cross-validation
+set.seed(123)
+train.control_cv <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+# Evaluate the model with all genes
+m1_cv <- train(as.formula(paste(colnames(df_DEG)[36], "~", paste(colnames(df_DEG)[38:54], collapse = "+"), sep = "")), 
+               data = df_DEG, method = "lm", trControl = train.control_cv)
+print(m1_cv)
+AIC(m1)
 
-# initialze the list with up- and downregulated genes
-up_crossval <- vector("list", 10)
-down_crossval <- vector("list", 10)
+m1_cv_params <- round(m1_cv$results[2:4], 3)
 
-#Perform 10 fold cross validation
-for(i in 1:10){
-  #Segement your data by fold using the which() function 
-  testIndexes <- which(folds==i, arr.ind=TRUE)
-  valData <- annotations_AL_shuffled[testIndexes, ]
-  trainData <- annotations_AL_shuffled[-testIndexes, ]
-  
-  
-  
-}
+# Evaluate the model with components only
+m2_cv <- train(SCORAD_Score ~ comp1 + comp2, 
+               data = df_DEG, method = "lm", trControl = train.control_cv)
+print(m2_cv)
+AIC(m2)
 
-## somehow now all the genes are non-significant, and I don't know if it's due to the reduced sample size or because sth else went wrong
+m2_cv_params <- round(m2_cv$results[2:4], 3)
+# component-only model has higher R-squared and smaller RMSE and MAE than all-gene model! And also a smaller AIC
+
+### bootstrapping
+set.seed(123)
+train.control_boot <- trainControl(method = "boot", number = 500)
+# Evaluate the model with all genes
+m1_boot <- train(as.formula(paste(colnames(df_DEG)[36], "~", paste(colnames(df_DEG)[38:54], collapse = "+"), sep = "")), 
+               data = df_DEG, method = "lm", trControl = train.control_boot)
+print(m1_boot)
+m1_boot_params <- round(m1_boot$results[2:4], 3)
+
+# Evaluate the model with components only
+m2_boot <- train(SCORAD_Score ~ comp1 + comp2, 
+               data = df_DEG, method = "lm", trControl = train.control_boot)
+print(m2_boot)
+m2_boot_params <- round(m2_boot$results[2:4], 3)
+# component-only model still has higher R-squared and smaller RMSE and MAE than all-gene model!
+
+# combine all performance metrics into one data frame
+m1_m2_perf_params <- matrix(c(m1_cv_params, m2_cv_params, m1_boot_params, m2_boot_params), nrow = 4, byrow = F) %>% data.frame()
+rownames(m1_m2_perf_params) <-  c("m1 CV", "m2 CV", "m1 boot", "m2 boot")
+colnames(m1_m2_perf_params) <- c("RMSE", "Rsquared", "MAE")
+m1_m2_perf_params
