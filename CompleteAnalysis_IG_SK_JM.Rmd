@@ -54,12 +54,13 @@ alldata_pso <- alldata %>% filter(clinical_group == "PSO")
 sample_id <- colnames(omicsdata)
 annotations <- data.frame(sample_id = colnames(omicsdata), MAARS_identifier = gsub('.{3}$', '', sample_id))
 annotations <- dplyr::left_join(annotations, alldata, by = "sample_id") %>% 
-  select(sample_id, MAARS_identifier.x, clinical_group, lesional, CUSTOM_Age, Gender, Institution, allergy, CUSTOM_Fam._hist._Atopic_dermatitis) %>% 
+  subset(select = c(sample_id, MAARS_identifier.x, clinical_group, lesional, CUSTOM_Age, Gender, Institution, allergy, CUSTOM_Fam._hist._Atopic_dermatitis)) %>% 
   rename(MAARS_identifier = MAARS_identifier.x)
 
 annotations <- dplyr::left_join(annotations, fulldata, by = c("sample_id" = "involved.skin.biopsy.involved.skin.biopsy.MAARS.Sample.identifier..MAARS_Sample_identifier.")) %>% 
-  select(sample_id, MAARS_identifier, clinical_group, lesional, CUSTOM_Age, Gender, Institution, patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score., allergy, CUSTOM_Fam._hist._Atopic_dermatitis) %>% 
+  subset(select = c(sample_id, MAARS_identifier, clinical_group, lesional, CUSTOM_Age, Gender, Institution, patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score., allergy, CUSTOM_Fam._hist._Atopic_dermatitis)) %>% 
   rename(SCORAD_Score = patient.SCORAD.index.SCORAD.SCORAD.Score..SCORAD_Score.)
+
 
 annotations$SCORAD_severity[annotations$SCORAD_Score < 25] <- "mild"
 annotations$SCORAD_severity[annotations$SCORAD_Score < 50 & annotations$SCORAD_Score >= 25] <- "moderate"
@@ -118,7 +119,7 @@ alldata_medication <- alldata %>% group_by(alldata$clinical_group) %>%
 
 SCORAD <- annotations %>% group_by(clinical_group) %>% filter(lesional == "LES") %>% summarize(mean_SCORAD = round(mean(SCORAD_Score), 2), sd_SCORAD = round(sd(SCORAD_Score), 2))
 ctrl <- c("CTRL", 0, 0)
-SCORAD <- rbind(SCORAD, ctrl) %>% mutate(mean_sd_SCORAD = paste0(mean_SCORAD, " (", sd_SCORAD, ")")) %>% select(-c(mean_SCORAD, sd_SCORAD))
+SCORAD <- rbind(SCORAD, ctrl) %>% mutate(mean_sd_SCORAD = paste0(mean_SCORAD, " (", sd_SCORAD, ")")) %>% subset(select = -c(mean_SCORAD, sd_SCORAD))
 
 # combine all into one table
 datatable <- as.data.frame(rbind(t(alldata_demographics), t(alldata_allergy), t(alldata_diseases), t(alldata_medication)))
@@ -427,12 +428,6 @@ plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "
 plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "lesional"))
 plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "sample_group"))
 plot(PCA_AD, choix = "ind", label = "none", habillage = which(names(df_PCA) == "Institution"))
-
-# make PCA of AD lesional samples to see if they cluster according to SCORAD
-df_PCA_AL <- data.frame(t(omicsdata_AL)[, -1], subset(annotations_AL, select = c(clinical_group, lesional, sample_group, Institution, SCORAD_Score, SCORAD_severity)))
-
-PCA_AL <- PCA(df_PCA, quali.sup = which(names(df_PCA) %in% c("clinical_group", "lesional", "sample_group", "Institution", "SCORAD_Score", "SCORAD_severity")))
-plot(PCA_AL, choix = "ind", label = "none", habillage = which(names(df_PCA_AL) == "SCORAD_Score"))
 ```
 
 # sPLS analysis
@@ -440,7 +435,7 @@ plot(PCA_AL, choix = "ind", label = "none", habillage = which(names(df_PCA_AL) =
 ### perform sPLS to reduce the number of dimensions
 # sPLS-DA for SCORAD as categorical variable
 
-splsda_DEG <- splsda(X = t(omicsdata_AL_DEG), Y = annotations_AL$SCORAD_severity, ncomp = 2, scale = TRUE, 
+splsda_DEG <- mixOmics::splsda(X = t(omicsdata_AL_DEG), Y = annotations_AL$SCORAD_severity, ncomp = 2, scale = TRUE, 
                      keepX = rep(10, 2), mode = "regression") 
 
 plotIndiv(splsda_DEG, ind.names = annotations_AL$SCORAD_Score, legend = TRUE, ellipse = TRUE)
@@ -461,10 +456,10 @@ dim(t(omicsdata_AL_DEG))
 SCORAD_df <- data.frame(annotations_AL$SCORAD_Score)
 dim(SCORAD_df)
 
-spls_DEG <- spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 10, keepX = rep(20, 10), scale = TRUE, mode = "regression")
+spls_DEG <- mixOmics::spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 10, keepX = rep(20, 10), scale = TRUE, mode = "regression")
 
 # spls tuning
-perf.pls <- perf(spls_DEG, validation = "loo", folds = 5, progressBar = FALSE)
+perf.pls <- mixOmics::perf(spls_DEG, validation = "loo", folds = 5, progressBar = FALSE)
 plot(perf.pls$Q2.total, type = "b", xlab = "Number of components", ylab = "Q2 total value", main = "Evolution the cross-validation error")
 perf.pls$Q2.total
 perf.pls$R2
@@ -473,14 +468,14 @@ perf.pls$R2
 list.keepX <- c(2:10, 15, 20)
 # tuning based on MAE
 
-tune.spls.MAE <- tune.spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 4, test.keepX = list.keepX, validation = "loo", 
+tune.spls.MAE <- mixOmics::tune.spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 4, test.keepX = list.keepX, validation = "loo", 
                            folds = 5, progressBar = FALSE, measure = 'MAE')
 plot(tune.spls.MAE, legend.position = 'topright')
 tune.spls.MAE$choice.keepX
 # keep 9 variables per component
 
 ## optimized sPLS
-spls_DEG_tuned <- spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 2, keepX = rep(9, 2), scale = TRUE, mode = "regression")
+spls_DEG_tuned <- mixOmics::spls(X = t(omicsdata_AL_DEG), Y = SCORAD_df, ncomp = 2, keepX = rep(9, 2), scale = TRUE, mode = "regression")
 
 plotIndiv(spls_DEG_tuned, rep.space = "X-variate", ind.names = FALSE, pch = 16, group = annotations_AL$SCORAD_cat10, legend = TRUE,
           col.per.group = col_vector, legend.title = "SCORAD Score", title = "sPLS of DEG with 2 comp, 9 variables per comp")
