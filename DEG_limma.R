@@ -18,6 +18,7 @@ library(FactoMineR)
 alldata <- read.csv(file = "M2PHDS_19-20_OMICS_CLIN_DATA_MAARS_all_Fri_Apr_04_14h_CEST_2014.csv", header = TRUE, sep = "\t")
 fulldata <- read.csv(file = "M2PHDS_19-20_OMICS_CLIN_DATA_MAARS_AD_full_20190131_12-34-49.csv", header = TRUE, sep = "\t")
 omicsdata <- read.delim("~/Documents/Omics/Project/OmicsProject/M2PHDS_19-20_OMICS_TRANSC_MAARS_normTranscriptome_618samples_16042014.txt")
+ensembl2gene <- read.csv("~/Documents/Omics/Project/OmicsProject/ensembl2gene.txt", stringsAsFactors=FALSE)
 
 # remove all samples from alldata that are not used in microarray
 alldata <- alldata %>% filter(sample_id %in% colnames(omicsdata))
@@ -101,8 +102,10 @@ upGenes_AL
 
 upTable <- topTable(Bayesfit, adjust.method= "BH", sort.by="p", n = Inf)
 upTable <- subset(upTable, rownames(upTable) %in% upGenes_AL)
-upTable
+rownames(upTable) <- gsub("_at", "", rownames(upTable))
 
+kable(upTable, format = "latex", digits = c(5, 5, 5, 8, 8, 5), caption = "Significantly upregulated genes") %>% 
+  kable_styling(latex_options = c("striped", "condensed"))
 
 
 # get significantly downregulated genes
@@ -113,7 +116,10 @@ downGenes_AL
 
 downTable <- topTable(Bayesfit, adjust.method= "BH", sort.by="p", n = Inf)
 downTable <- subset(downTable, rownames(downTable) %in% downGenes_AL)
+rownames(downTable) <- gsub("_at", "", rownames(downTable))
 downTable 
+kable(downTable, format = "latex", digits = c(5, 5, 5, 8, 8, 5), caption = "Significantly downregulated genes") %>% 
+  kable_styling(latex_options = c("striped", "condensed"))
 
 
 # see if the most differentially expressed gene is linearly associated with SCORAD

@@ -12,7 +12,7 @@ library(GGally)
 library(caret)
 
 # not the outcome is the SCORAD and DEGs are explanatory factors
-
+    
 #significantly upregulated genes in unadjusted continuous analysis
 upGenes_AL
 # significantly downregulated genes in unadjusted continuous analyses
@@ -25,32 +25,32 @@ DEG_AL_unadj_ID <- gsub("_at", "", DEG_AL_unadj)
 # get gene names
 ensembl2gene <- read.csv("~/Documents/Omics/Project/OmicsProject/ensembl2gene.txt", stringsAsFactors=FALSE)
 ensembl2gene_DEG <- subset(ensembl2gene, EnsemblID %in% DEG_AL_unadj_ID)
-
+    
 DEG_AL_unadj_name <- ensembl2gene_DEG$GeneSymbol
 list_DEG_AL <- data.frame(DEG_AL_unadj_ID, DEG_AL_unadj_name)
-
+    
 # write them into txt file
 # write(DEG_AL_unadj_ID, "DEG_AL_unadj_ID.txt")
 # write(DEG_AL_unadj_name, "DEG_AL_unadj_name.txt")
 # write.table(list_DEG_AL, "list_DEG_AL.txt", quote = FALSE, row.names = FALSE)
-
+    
 ### heatmap for differentially expressed genes
-
+  
 # subset expression dataframe to only contain DEG values
 omicsdata_AL_DEG <- as.matrix(subset(omicsdata_AL, subset = rownames(omicsdata_AL) %in% DEG_AL_unadj))
-
+    
 # topTable from DEGs only
 DEGtopTable <- rbind(upTable, downTable) %>% arrange(desc(logFC))
-
+  
 # heatmap.2(omicsdata_AL_DEG, trace = "none", density.info = "none")
-
-
+    
+    
 row_labels <- structure(ensembl2gene_DEG$GeneSymbol, names = ensembl2gene_DEG$EnsemblID) # to do: subset df so that only DEGs are in df!
 column_labels <- structure(gsub("MAARS_", "", colnames(omicsdata_AL_DEG)), names = colnames(omicsdata_AL_DEG))
-
+    
 # annotations_AL$SCORAD_Score[column_order(hm)]
 # SCORAD score is ordered automatically, so I don't have to do this
-  
+      
 row_ha <- HeatmapAnnotation("SCORAD" = anno_barplot(annotations_AL$SCORAD_Score, fill = "grey"), 
                             annotation_name_gp = gpar(fontsize = 10, fontface = "bold"))
 Heatmap(omicsdata_AL_DEG, border = TRUE, column_title = "Samples", row_title = "Differentially expressed genes", 
@@ -58,13 +58,13 @@ Heatmap(omicsdata_AL_DEG, border = TRUE, column_title = "Samples", row_title = "
         clustering_method_rows = "complete", clustering_method_columns = "complete",
         column_names_gp = gpar(fontsize = 8), bottom_annotation = row_ha, 
         heatmap_legend_param = list(title = "normalized expression level", title_position = "leftcenter-rot", legend_height = unit(5, "cm")))
-  
+      
 ### perform PCA descriptive analysis
 # df_PCA_AL <- data.frame(t(omicsdata_AL)[, -1], subset(annotations_AL, select = c(clinical_group, lesional, sample_group, Institution, SCORAD_Score, SCORAD_severity)))
 PCA_AL <- pca(t(omicsdata_AL)[, -1])
 plotIndiv(PCA_AL, group = annotations_AL$SCORAD_severity, legend = TRUE, pch = annotations_AL$Institution, ind.names = FALSE, 
           title = "PCA of all genes in AL samples, comp 1 & 2", legend.title.pch = "Institution", legend.title = "SCORAD Severity")
-
+    
 
 
 ### perform sPLS to reduce the number of dimensions
@@ -122,6 +122,7 @@ var_comp2 <- selectVar(spls_DEG_tuned, comp = 2)
 DEG_spls <- c(var_comp1$X$name, var_comp2$X$name)
 
 
+
 ## repeat heatmap with selected 18 genes
 DEG_spls_ID <- gsub("_at", "", DEG_spls)
 ensembl2gene_spls_DEG <- subset(ensembl2gene, EnsemblID %in% DEG_spls_ID)
@@ -163,8 +164,8 @@ names(df_DEG)
 
 
 # some exploratory visualizations
-ggpairs(df_DEG, columns = c(8, 5, 6, 7, 9, 10, 11))
-ggpairs(df_DEG, columns = c(8, 16:30)) 
+ggpairs(df_DEG, columns = c(36, 7, 8, 9, 31, 33, 34, 35, 37))
+ggpairs(df_DEG, columns = c(36, 16:30)) 
 boxplot(annotations_AL$SCORAD_severity ~ annotations_AL$Institution)
 # genes are all correlated individually with SCORAD (because we selected them this way!), but also correlated among each other
 
@@ -186,22 +187,28 @@ df_DEG <- left_join(df_DEG, spls_comp,  by = "sample_id")
 
 
 variables <- names(alldata_AL)[c(7:29, 31:35)]
+var_genes <- names(df_DEG)[38:54]
 
 fit_univariable <- list()
+fit_univariable_genes <- list()
 # build univariate models based on this dataframe
 for (i in 1:length(variables)){
  fit_univariable[[i]] <- lm(as.formula(paste("SCORAD_Score", "~", variables[i], sep = " ")), data = alldata_AL)
 }
 
+for (i in 1:length(var_genes)){
+  fit_univariable_genes[[i]] <- lm(as.formula(paste(colnames(df_DEG)[36], "~", var_genes[i], sep = " ")), data = df_DEG)
+}
+
 # extract coefficients and p-values
 lapply(fit_univariable, summary)
-# variables with p<0.2: Institution, Gender, Known_Allergies_v2..House_dust_mite, Known_Allergies_v2..Food, Known_Allergies_v2..Drug_Allergy,
-# Other_concurrent_chronic_diseases_v2..Asthma, CUSTOM_Fam._hist._Atopic_dermatitis, ethnicity
+  # variables with p<0.2: Institution, Gender, Known_Allergies_v2..House_dust_mite, Known_Allergies_v2..Food, Known_Allergies_v2..Drug_Allergy,
+  # Other_concurrent_chronic_diseases_v2..Asthma, CUSTOM_Fam._hist._Atopic_dermatitis, ethnicity
 
 # check model assumptions
 par(mfrow = c(2, 2))
 lapply(fit_univariable, plot)
-
+lapply(fit_univariable_genes, plot)
 
 
 # build a model with only the genes
@@ -210,10 +217,12 @@ m1 <- lm(as.formula(paste(colnames(df_DEG)[36], "~",
 par(mfrow = c(2, 2))
 plot(m1)
 summary(m1)
+
 # because of correlation between genes, only some of them are significant
 
 m2 <- lm(SCORAD_Score ~ comp1 + comp2, data = df_DEG)
 summary(m2)
+plot(m2)
 
 # build a model with DEG and clinical variables
 m3 <- lm(as.formula(paste(colnames(df_DEG)[36], "~",
@@ -244,9 +253,11 @@ summary(m6)
 
 ## model calibration plots
 par(mfrow = c(1, 1))
-plot(m1$fitted.values, df_DEG$SCORAD_Score)
+plot(m1$fitted.values, df_DEG$SCORAD_Score, main = "calibration plot 17 genes model", xlab = "Fitted SCORAD values",
+     ylab = "SCORAD values")
 abline(0, 1) # 45° line
-plot(m2$fitted.values, df_DEG$SCORAD_Score)
+plot(m2$fitted.values, df_DEG$SCORAD_Score, main = "calibration plot 2 components model", xlab = "Fitted SCORAD values",
+     ylab = "SCORAD values")
 abline(0, 1)
 
 
@@ -278,7 +289,7 @@ train.control_boot <- trainControl(method = "boot", number = 500)
 m1_boot <- train(as.formula(paste(colnames(df_DEG)[36], "~", paste(colnames(df_DEG)[38:54], collapse = "+"), sep = "")), 
                data = df_DEG, method = "lm", trControl = train.control_boot)
 print(m1_boot)
-m1_boot_params <- round(m1_boot$results[2:4], 3)
+m1_boot_params <- round(m1_boot_params[2:4], 3)
 
 # Evaluate the model with components only
 m2_boot <- train(SCORAD_Score ~ comp1 + comp2, 
@@ -288,7 +299,28 @@ m2_boot_params <- round(m2_boot$results[2:4], 3)
 # component-only model still has higher R-squared and smaller RMSE and MAE than all-gene model!
 
 # combine all performance metrics into one data frame
-m1_m2_perf_params <- matrix(c(m1_cv_params, m2_cv_params, m1_boot_params, m2_boot_params), nrow = 4, byrow = F) %>% data.frame()
-rownames(m1_m2_perf_params) <-  c("m1 CV", "m2 CV", "m1 boot", "m2 boot")
+m1_m2_perf_params <- matrix(c(m1_cv_params, m2_cv_params, m1_boot_params, m2_boot_params), nrow = 4, byrow = T) %>% data.frame()
+rownames(m1_m2_perf_params) <-  c("17 genes CV", "2 comp CV", "17 genes boot", "2 comp boot")
 colnames(m1_m2_perf_params) <- c("RMSE", "Rsquared", "MAE")
+kable(m1_m2_perf_params, format = "latex") %>%  kable_styling(latex_options = c("basic"))
 m1_m2_perf_params
+
+##### comparison with literature #####
+
+### comparison with https://doi.org/10.1371/journal.pone.0144316
+downgenes_lit <- read.csv("~/Documents/Omics/Project/OmicsProject/downgenes_lit.csv", stringsAsFactors=FALSE)
+upgenes_lit <- read.csv("~/Documents/Omics/Project/OmicsProject/upgenes_lit.csv", stringsAsFactors=FALSE)
+ensembl2gene_DEG$GeneSymbol[ensembl2gene_DEG$GeneSymbol %in% downgenes_lit]
+ensembl2gene_DEG$GeneSymbol[ensembl2gene_DEG$GeneSymbol %in% upgenes_lit]
+# no overlap between literature and our genes
+
+
+DEG_functional.analysis <- read.csv("~/Documents/Omics/Project/OmicsProject/DEG_functional_analysis_sPLS.csv")
+DEG_functional.analysis <- subset(DEG_functional.analysis, select = -c(2:5))
+colnames(DEG_functional.analysis) <- c("GO biological process", "fold enrichment", "raw p-value", "FDR-corrected p-value")
+kable(DEG_functional.analysis, format = "latex") %>% kable_styling(latex_options = c("basic"))
+
+# check if institution has a significant influence on SCORAD 
+mm <- lm(SCORAD_Score ~ 1, data = df_DEG)
+mm1 <- lm(SCORAD_Score ~ Institution, data = df_DEG)
+anova(mm, mm1)
